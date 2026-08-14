@@ -1,4 +1,4 @@
-name: argus_world_sim package CI
+name: argus_sim package CI
 
 on:
   push:
@@ -17,10 +17,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and test argus_world_sim
+      - name: Build and test argus_sim
         uses: ros-tooling/action-ros-ci@v0.4
         with:
-          package-name: argus_world_sim
+          package-name: argus_sim
           target-ros2-distro: humble
           colcon-defaults: |
             {

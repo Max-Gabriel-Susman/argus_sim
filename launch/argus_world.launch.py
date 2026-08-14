@@ -22,7 +22,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             'world': os.path.join(
-                get_package_share_directory('argus_world_sim'),
+                get_package_share_directory('argus_sim'),
                 'worlds',
                 'argus_empty.world',
             ),
