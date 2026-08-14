@@ -12,8 +12,15 @@ find_package(rclcpp REQUIRED)
 find_package(gazebo_ros REQUIRED)
 find_package(geometry_msgs REQUIRED)
 
+ament_python_install_package(${PROJECT_NAME})
+
+install(PROGRAMS
+  ${PROJECT_NAME}/dataset_relay_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(
-  DIRECTORY launch worlds
+  DIRECTORY launch worlds config
   DESTINATION share/${PROJECT_NAME}
 )
 
