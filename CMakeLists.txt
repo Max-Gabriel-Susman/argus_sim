@@ -7,15 +7,21 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(gazebo_ros REQUIRED)
-find_package(geometry_msgs REQUIRED)
+find_package(argus_core REQUIRED)
 
-ament_python_install_package(${PROJECT_NAME})
+add_executable(dataset_relay_node
+  src/dataset_relay_node.cpp
+  src/replay_server.cpp
+)
 
-install(PROGRAMS
-  ${PROJECT_NAME}/dataset_relay_node.py
+target_include_directories(dataset_relay_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+ament_target_dependencies(dataset_relay_node rclcpp argus_core)
+
+install(TARGETS dataset_relay_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
