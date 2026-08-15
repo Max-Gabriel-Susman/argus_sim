@@ -1,0 +1,4 @@
+#ifndef REPLAY_SERVER_HPP
+    #define REPLAY_SERVER_HPP
+
+#endif /* REPLAY_SERVER_HPP */
