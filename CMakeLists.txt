@@ -10,6 +10,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(argus_core REQUIRED)
 
+message(STATUS "argus_core_INCLUDE_DIRS=${argus_core_INCLUDE_DIRS}")
+
 add_executable(dataset_relay_node
   src/dataset_relay_node.cpp
   src/replay_server.cpp
@@ -17,6 +19,7 @@ add_executable(dataset_relay_node
 
 target_include_directories(dataset_relay_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  ${argus_core_INCLUDE_DIRS}
 )
 
 ament_target_dependencies(dataset_relay_node rclcpp argus_core)
@@ -26,7 +29,7 @@ install(TARGETS dataset_relay_node
 )
 
 install(
-  DIRECTORY launch worlds config
+  DIRECTORY worlds config
   DESTINATION share/${PROJECT_NAME}
 )
 

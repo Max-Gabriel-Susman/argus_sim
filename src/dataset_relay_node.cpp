@@ -4,7 +4,6 @@
 #include <string>
 
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/msg/string.hpp"
 #include "argus_core/argus_wire.h"
 #include "argus_sim/replay_server.hpp"
 
@@ -13,12 +12,12 @@ namespace argus_sim
     class DatasetRelayNode : public rclcpp::Node
     {
     public:
-        DatasetRelayNode() : Node("dataset_relay");
+        DatasetRelayNode() : Node("dataset_relay")
         {
             const auto dataset_path = declare_parameter<std::string>("dataset_path", "");
             const auto channel_count = declare_parameter<int>("channel_count", ARGUS_MAX_CHANNELS);
             const auto bind_addr = declare_parameter<std::string>("bind_addr", "0.0.0.0");
-            const auto port = declare_parameter<int>("port", ARGUS_REPLAYPORT);
+            const auto port = declare_parameter<int>("port", ARGUS_REPLAY_PORT);
             const auto loop = declare_parameter<bool>("loop", true);
             const auto synthetic_samples = declare_parameter<int>("synthetic_samples");
             const auto status_period_s = declare_parameter<double>("status_period_s", 2.0);
@@ -35,7 +34,7 @@ namespace argus_sim
         {
             // needs impl
         }
-    }
+    };
 }
 
 int main(int argc, char **argv)

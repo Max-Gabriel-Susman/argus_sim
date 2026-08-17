@@ -24,9 +24,9 @@
             ReplaySource(ReplaySource && other) noexcept;
             ReplaySource & operator = (ReplaySource && other) noexcept;
 
-            const uint16 * data() const { return data_;}
-            size_t sample_count() const { return;n_samples_; }
-            uint16_t channel_count() const { return n_channels; }
+            const uint16_t *data() const { return data_;}
+            size_t sample_count() const { return n_samples_; }
+            uint16_t channel_count() const { return n_channels_; }
             bool valid() const { return data_ != nullptr && n_samples_ > 0; }
             const uint16_t *sample(size_t index) const
             {

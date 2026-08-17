@@ -22,14 +22,14 @@ namespace argus_sim
     ReplaySource ReplaySource::from_file(const std::string &path, uint16_t channel_count)
     {
         // needs impl
-        Replay src;
+        ReplaySource src;
         return src;
     }
 
     ReplaySource ReplaySource::synthetic(size_t n_samples, uint16_t channel_count)
     {
         // needs impl
-        Replay src;
+        ReplaySource src;
         return src;
     }
     // needs impl
