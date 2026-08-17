@@ -27,8 +27,14 @@ namespace argus_sim
                 throw std::invalid_argument("channel_count out of range");
             }
             // needs impl
-            
+
         }
         // needs impl
     }
+}
+
+int main(int argc, char **argv)
+{
+    // needs impl
+    return 0;
 }
