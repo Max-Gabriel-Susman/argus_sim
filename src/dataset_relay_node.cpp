@@ -30,6 +30,11 @@ namespace argus_sim
 
         }
         // needs impl
+    private:
+        void publish_status()
+        {
+            // needs impl
+        }
     }
 }
 
