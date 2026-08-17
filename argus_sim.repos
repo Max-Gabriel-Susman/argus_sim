@@ -1,0 +1,5 @@
+repositories:
+    argus_core:
+        type: git
+        url: https://github.com/Max-Gabriel-Susman/argus_core.git
+        version: main

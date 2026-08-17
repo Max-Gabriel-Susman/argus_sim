@@ -22,6 +22,7 @@ jobs:
         with:
           package-name: argus_sim
           target-ros2-distro: humble
+          vcs-repo-file-url: ${{ github.workspace }}/argus_sim.repos
           colcon-defaults: |
             {
               "build": {
