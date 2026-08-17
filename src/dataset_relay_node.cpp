@@ -40,6 +40,14 @@ namespace argus_sim
 
 int main(int argc, char **argv)
 {
-    // needs impl
+    rclcpp::init(argc, argv);
+    try {
+        rclcpp::spin(std::make_shared<argus_sim::DatasetRelayNode>());
+    } catch (const std::exception &e) {
+        // needs impl
+        rclcpp::shutdown();
+        return 1;
+    }
+    rclcpp::shutdown();
     return 0;
 }
