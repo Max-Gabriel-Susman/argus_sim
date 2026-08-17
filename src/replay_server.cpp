@@ -25,4 +25,12 @@ namespace argus_sim
         Replay src;
         return src;
     }
+
+    ReplaySource ReplaySource::synthetic(size_t n_samples, uint16_t channel_count)
+    {
+        // needs impl
+        Replay src;
+        return src;
+    }
+    // needs impl
 }
