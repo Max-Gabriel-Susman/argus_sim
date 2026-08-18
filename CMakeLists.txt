@@ -10,8 +10,6 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(argus_core REQUIRED)
 
-message(STATUS "argus_core_INCLUDE_DIRS=${argus_core_INCLUDE_DIRS}")
-
 add_executable(dataset_relay_node
   src/dataset_relay_node.cpp
   src/replay_server.cpp
@@ -29,8 +27,9 @@ install(TARGETS dataset_relay_node
 )
 
 install(
-  DIRECTORY worlds config
+  DIRECTORY launch worlds config
   DESTINATION share/${PROJECT_NAME}
+  OPTIONAL
 )
 
 if(BUILD_TESTING)
