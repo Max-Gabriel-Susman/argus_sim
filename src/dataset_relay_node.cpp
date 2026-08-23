@@ -30,7 +30,7 @@ public:
     const auto bind_addr = declare_parameter<std::string>("bind_addr", "0.0.0.0");
     const auto port = declare_parameter<int>("port", ARGUS_REPLAY_PORT);
     const auto loop = declare_parameter<bool>("loop", true);
-    const auto synthetic_samples = declare_parameter<int>("synthetic_samples");
+    const auto synthetic_samples = declare_parameter<int>("synthetic_samples", 30000);
     const auto status_period_s = declare_parameter<double>("status_period_s", 2.0);
 
     if (channel_count <= 0 || channel_count > 4096) {
