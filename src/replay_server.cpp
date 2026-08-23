@@ -34,10 +34,10 @@ namespace argus_sim
     struct stat st {};
     if (::fstat(fd, &st) != 0) {
       ::close(fd);
-      throw std::runtime_error("fstat " + path + ": " + std:strerror(errno));
+      throw std::runtime_error("fstat " + path + ": " + std::strerror(errno));
     }
 
-    const size_t bytes = static_case<size_t>(st.st_size);
+    const size_t bytes = static_cast<size_t>(st.st_size);
     const size_t row_bytes = static_cast<size_t>(channel_count) *sizeof(uint16_t);
     if (bytes == 0 || bytes % row_bytes != 0) {
       ::close(fd);
@@ -129,7 +129,7 @@ namespace argus_sim
       release();
       owned_ = std::move(other.owned_);
       map_ = other.map_;
-      map_bytes_ = other.map_bytes_
+      map_bytes_ = other.map_bytes_;
       data_ = owned_.empty() ? other.data_ : owned_.data();
       n_samples_ = other.n_samples_;
       n_channels_ = other.n_channels_;
@@ -137,7 +137,7 @@ namespace argus_sim
       other.map_ = nullptr;
       other.map_bytes_ = 0;
       other.data_ = nullptr;
-      other.n_samples_ = 0
+      other.n_samples_ = 0;
       other.n_channels_ = 0;
     }
     return *this;
@@ -159,10 +159,10 @@ namespace argus_sim
 
     row_bytes_ = static_cast<size_t>(source_.channel_count()) * sizeof(uint16_t);
 
-    const size_t = ARGUS_REPLAY_MAX_PAYLOAD / row_bytes_;
+    const size_t fit = ARGUS_REPLAY_MAX_PAYLOAD / row_bytes_;
     if (fit == 0) {
       throw std::invalid_argument(
-        std::to_string(source_.channel_count()) *
+        std::to_string(source_.channel_count()) +
         " channels do not fit one MTU; jumbo frames or channel splitting required");
     }
     samples_per_chunk_ = static_cast<uint16_t>(fit);
@@ -192,10 +192,10 @@ namespace argus_sim
     // A burst is ~21 packets back to back. Give the send buffer headroom so a
     // slow drain blocks rather than silently dropping.
     int sndbuf = 1 << 20;
-    ::setsockopt(sock_, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    ::setsockopt(sock_, SOL_SOCKET, SO_REUSEADDR, &sndbuf, sizeof(sndbuf));
 
     // Bounded recv so stop() is observed without needing to poke the socket.
-    stuct timeval tv {};
+    struct timeval tv {};
     tv.tv_sec = 0;
     tv.tv_usec = 200000;
     ::setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
@@ -219,177 +219,177 @@ namespace argus_sim
       running_.store(true);
       thread_ = std::thread(&ReplayServer::run, this);
     }
+  }
 
-    void ReplayServer::stop()
-    {
-      if (!running_.exchange(false)) {
-        return;
-      }
-      if (thread_.joinable()) {
-        thread_.join();
-      }
-      if (sock_ >= 0) {
-        ::close(sock_);
-        sock_ = -1;
-      }
+  void ReplayServer::stop()
+  {
+    if (!running_.exchange(false)) {
+      return;
+    }
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+    if (sock_ >= 0) {
+      ::close(sock_);
+      sock_ = -1;
     }
   }
 
-    ReplayStats ReplayServer::stats() const
-    {
+  ReplayStats ReplayServer::stats() const
+  {
+    std::lock_guard<std::mutex> lock(stats_mutex_);
+    return stats_;
+  }
+
+  void ReplayServer::run()
+  {
+    uint8_t rx[512];
+
+    while (running_.load()) {
+      struct sockaddr_in peer {};
+      socklen_t peer_len = sizeof(peer);
+
+      const ssize_t n = ::recvfrom(
+        sock_, rx, sizeof(rx), 0,
+        reinterpret_cast<struct sockaddr *>(&peer), &peer_len);
+
+      if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+          continue; // recv timeout; re-check running
+        }
+        break;
+      }
+      handle(rx, static_cast<size_t>(n), &peer, peer_len);
+    }
+  }
+
+  void ReplayServer::handle(
+    const uint8_t *data, size_t len, const void *peer_raw, size_t peer_len)
+  {
+    const auto bump_bad = [this]() {
       std::lock_guard<std::mutex> lock(stats_mutex_);
-      return stats_;
+      stats_.bad_packets++;
+    };
+
+    if (len != sizeof(argus_replay_request_t)) {
+      bump_bad();
+      return;
     }
 
-    void ReplayServer::run()
+    argus_replay_request_t req;
+    std::memcpy(&req, data, sizeof(req));
+
+    if (req.magic != ARGUS_FRAME_MAGIC ||
+      req.version != ARGUS_REPLAY_VERSION ||
+      req.type != ARGUS_MSG_REPLAY_REQUEST)
     {
-      uint8_t rx[512];
-
-      while (running_.load()) {
-        struct sockaddr_in peer {};
-        socklen_t peer_len = sizeof(peer);
-
-        const ssize_t n = ::recvfrom(
-          sock_, rx, sizeof(rx), 0,
-          reinterpret_cast<struct sockaddr *>(&peer), &peer_len);
-
-        if (n < 0) {
-          if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-            continue; // recv timeout; re-check running
-          }
-          break;
-        }
-        handle(rx, static_cast<size_t>(n), &peer, peer_len);
-      }
+      bump_bad();
+      return;
     }
 
-    void ReplayServer::handle(
-      const uint8_t *data, size_t len, const void *peer_raw, size_t peer_len)
-    {
-      const auto bump_bad = [this]() {
-        std::lock_guard<std::mutex> lock(stats_mutex_;
-        stats_.bad_packets++;
-      };
-
-      if (len != sizeof(argus_replay_request_t)) {
-        bump_bad();
-        return;
-      }
-
-      argus_replay_request_t req;
-      std::memcpy(&req, data, sizeof(req));
-
-      if (req.magic != ARGUS_FRAME_MAGIC ||
-        req.version != ARGUS_REPLAY_VERSION ||
-        req.type != ARGUS_MSG_REPLAY_REQUEST)
-      {
-        bump_bad();
-        return;
-      }
-
-      const uint16_t want = crc16_ccitt(data, offsetof(argus_replay_request_t, crc));
-      if (want != req.crc) {
-        bump_bad();
-        return;
-      }
-      if (req.sample_count == 0) {
-        bump_bad();
-        return;
-      }
-
-      const size_t n_samples = source_.sample_count();
-      const uint16_t channels = source_.channel_count();
-      const bool loop = config_.loop || (req.flags & ARGUS_REPLAY_F_LOOP);
-
-      size_t offset = req.sample_offset;
-      bool wrapped = false;
-      if (offset >= n_samples) {
-        if (!loop) {
-          return;
-        }
-        offset %= n_samples;
-        wrapped = true;
-      }
-
-      uint32_t count = req.sample_count;
-      if (count > config_.max_samples_per_request) {
-        count = config_.max_samples_per_request;
-      }
-      if (!loop && offset + count > n_samples) {
-        count = static_cast<uint32_t>(n_samples - offset);
-      }
-
-      const uint16_t total_chunks = static_cast<uint16_t>(
-        (count + samples_per_chunk_ - 1) / samples_per_chunk_);
-
-      uint64_t sent_bytes = 0;
-
-      for (uint16_t index = 0; index < total_chunks; ++index) {
-        const uint32_t start = static_cast<uint32_t>(index) * samples_per_chunk_;
-        const uint16_t in_chunk = static_cast<uint16_t>(
-          std::min<uint32_t>(samples_per_chunk_, count - start)
-        );
-
-        uint8_t *payload = tx_buffer_.data() + sizeof(argus_replay_chunk_hdr_t);
-        for (uint16_t s = 0; s < in_chunk; ++) {
-          // Per-sample copy with modulo indexing, so a wrap at the end of the
-          // dataset needs no special case.
-          const size_t src = (offset + start + s) % n_samples;
-          std::memcpy(payload + s * row_bytes_, source_.sample(src), row_bytes_);
-        }
-        const uint16_t payload_len = static_cast<uint16_t>(in_chunk * row_bytes_);
-
-        argus_replay_chunk_hdr_t hdr {};
-        hdr.magic = ARGUS_FRAME_MAGIC;
-        hdr.version = ARGUS_REPLAY_VERSION;
-        hdr.type = ARGUS_MSG_REPLAY_CHUNK;
-        hdr.seq = req.seq;
-        hdr.sample_offset = static_cast<uint32_t>((offset + start) % n_samples);
-        hdr.sample_count = in_chunk;
-        hdr.chunk_index = index;
-        hdr.chunk_total = total_chunks;
-        hdr.channel_count = channels;
-        hdr.payload_len = payload_len;
-        hdr.crc = 0;
-
-        std::memcpy(tx_buffer_.data(), &hdr, sizeof(hdr));
-
-        // CRC spans the header up to the field, then the payload. Cheap enough in
-        // C to cover both, unlike a pure-Python sendor.
-        uint16_t crc = crc16_ccitt(
-          tx_buffer_.data(), offsetof(argus_replay_chunk_hdr_t, crc));
-        crc = crc16_ccitt_update(crc, payload, payload_len);
-        hdr.crc = crc;
-        std::memcpy(tx_buffer_.data(), &hdr, sizeof(hdr));
-
-        const size_t packet_len = sizeof(argus_replay_chunk_hdr_t) + payload_len;
-        const ssize_t rc = ::sendto(
-          sock_, tx_buffer_.data(), packet_len, 0,
-          static_cast<const struct sockaddr *>(peer_raw),
-          static_cast<socklen_t>(peer_len));
-
-        if (rc < 0) {
-          break;
-        }
-
-        sent_bytes += static_cast<uint64_t>(rc);
-      }
-
-      const auto *peer= static_cast<const struct sockaddr_in *>(peer_raw);
-      char peer_str[INET_ADDRSTRLEN] = {0};
-      ::inet_ntop(AF_INET, &peer->sin_addr, peer_str, sizeof(peer_str));
-
-      std::lock_guard<std::mutex> lock(stats_mutex_);
-      stats_.requests_served++;
-      if (req.flags *ARGUS_REPLAY_F_RETRANSMIT) {
-        stats_.retransmits_served++;
-      }
-      if (wrapped || offset + count > n_samples) {
-        stats_.wraps++;
-      }
-      stats_.chunks_sent += total_chunks;
-      stats_.bytes_sent += sent_bytes;
-      stats_.last_offset = offset;
-      stats_.last_peer = peer_str;
+    const uint16_t want = crc16_ccitt(data, offsetof(argus_replay_request_t, crc));
+    if (want != req.crc) {
+      bump_bad();
+      return;
     }
+    if (req.sample_count == 0) {
+      bump_bad();
+      return;
+    }
+
+    const size_t n_samples = source_.sample_count();
+    const uint16_t channels = source_.channel_count();
+    const bool loop = config_.loop || (req.flags & ARGUS_REPLAY_F_LOOP);
+
+    size_t offset = req.sample_offset;
+    bool wrapped = false;
+    if (offset >= n_samples) {
+      if (!loop) {
+        return;
+      }
+      offset %= n_samples;
+      wrapped = true;
+    }
+
+    uint32_t count = req.sample_count;
+    if (count > config_.max_samples_per_request) {
+      count = config_.max_samples_per_request;
+    }
+    if (!loop && offset + count > n_samples) {
+      count = static_cast<uint32_t>(n_samples - offset);
+    }
+
+    const uint16_t total_chunks = static_cast<uint16_t>(
+      (count + samples_per_chunk_ - 1) / samples_per_chunk_);
+
+    uint64_t sent_bytes = 0;
+
+    for (uint16_t index = 0; index < total_chunks; ++index) {
+      const uint32_t start = static_cast<uint32_t>(index) * samples_per_chunk_;
+      const uint16_t in_chunk = static_cast<uint16_t>(
+        std::min<uint32_t>(samples_per_chunk_, count - start)
+      );
+
+      uint8_t *payload = tx_buffer_.data() + sizeof(argus_replay_chunk_hdr_t);
+      for (uint16_t s = 0; s < in_chunk; ++s) {
+        // Per-sample copy with modulo indexing, so a wrap at the end of the
+        // dataset needs no special case.
+        const size_t src = (offset + start + s) % n_samples;
+        std::memcpy(payload + s * row_bytes_, source_.sample(src), row_bytes_);
+      }
+      const uint16_t payload_len = static_cast<uint16_t>(in_chunk * row_bytes_);
+
+      argus_replay_chunk_hdr_t hdr {};
+      hdr.magic = ARGUS_FRAME_MAGIC;
+      hdr.version = ARGUS_REPLAY_VERSION;
+      hdr.type = ARGUS_MSG_REPLAY_CHUNK;
+      hdr.seq = req.seq;
+      hdr.sample_offset = static_cast<uint32_t>((offset + start) % n_samples);
+      hdr.sample_count = in_chunk;
+      hdr.chunk_index = index;
+      hdr.chunk_total = total_chunks;
+      hdr.channel_count = channels;
+      hdr.payload_len = payload_len;
+      hdr.crc = 0;
+
+      std::memcpy(tx_buffer_.data(), &hdr, sizeof(hdr));
+
+      // CRC spans the header up to the field, then the payload. Cheap enough in
+      // C to cover both, unlike a pure-Python sendor.
+      uint16_t crc = crc16_ccitt(
+        tx_buffer_.data(), offsetof(argus_replay_chunk_hdr_t, crc));
+      crc = crc16_ccitt_update(crc, payload, payload_len);
+      hdr.crc = crc;
+      std::memcpy(tx_buffer_.data(), &hdr, sizeof(hdr));
+
+      const size_t packet_len = sizeof(argus_replay_chunk_hdr_t) + payload_len;
+      const ssize_t rc = ::sendto(
+        sock_, tx_buffer_.data(), packet_len, 0,
+        static_cast<const struct sockaddr *>(peer_raw),
+        static_cast<socklen_t>(peer_len));
+
+      if (rc < 0) {
+        break;
+      }
+
+      sent_bytes += static_cast<uint64_t>(rc);
+    }
+
+    const auto *peer= static_cast<const struct sockaddr_in *>(peer_raw);
+    char peer_str[INET_ADDRSTRLEN] = {0};
+    ::inet_ntop(AF_INET, &peer->sin_addr, peer_str, sizeof(peer_str));
+
+    std::lock_guard<std::mutex> lock(stats_mutex_);
+    stats_.requests_served++;
+    if (req.flags & ARGUS_REPLAY_F_RETRANSMIT) {
+      stats_.retransmits_served++;
+    }
+    if (wrapped || offset + count > n_samples) {
+      stats_.wraps++;
+    }
+    stats_.chunks_sent += total_chunks;
+    stats_.bytes_sent += sent_bytes;
+    stats_.last_offset = offset;
+    stats_.last_peer = peer_str;
+  }
 } // namespace argus_sim

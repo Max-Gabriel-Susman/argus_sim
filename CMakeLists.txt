@@ -6,6 +6,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # find dependencies
+find_package(std_msgs REQUIRED)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(argus_core REQUIRED)
@@ -21,6 +22,7 @@ target_include_directories(dataset_relay_node PRIVATE
 )
 
 ament_target_dependencies(dataset_relay_node rclcpp argus_core)
+ament_target_dependencies(dataset_relay_node rclcpp std_msgs argus_core)
 
 install(TARGETS dataset_relay_node
   DESTINATION lib/${PROJECT_NAME}

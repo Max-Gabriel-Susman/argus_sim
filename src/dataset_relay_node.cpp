@@ -44,7 +44,7 @@ namespace argus_sim
         RCLCPP_WARN(
           get_logger(),
           "no dataset_path set; serving %d samples of synthetic identity pattern",
-          synthetic_samples);
+          static_cast<int>(synthetic_samples));
       } else {
         source_ = ReplaySource::from_file(dataset_path, static_cast<uint16_t>(channel_count));
         RCLCPP_INFO(get_logger(), "dataset: %s", dataset_path.c_str());
@@ -59,21 +59,21 @@ namespace argus_sim
       server_->start();
 
       status_pub_ = create_publisher<std_msgs::msg::String>("~/status", 10);
-      status_timer_ = create_waall_timer(
+      status_timer_ = create_wall_timer(
         std::chrono::duration<double>(std::max(0.1, status_period_s)),
         std::bind(&DatasetRelayNode::publish_status, this));
 
       RCLCPP_INFO(
         get_logger(),
         "replay server on %s:%d -- %zu samples x %u channels, %u samples/chunk, loop=%s",
-        bind_addr.c_str(), port, source_.sample_count(), source_.channel_count(),
+        bind_addr.c_str(), static_cast<int>(port), source_.sample_count(), source_.channel_count(),
         server_->samples_per_chunk(), loop ? "true" : "false");
         if (channel_count != ARGUS_MAX_CHANNELS) {
           RCLCPP_WARN(
             get_logger(),
-            "serving %d channels but ARGUS_MAX_CHANNELS is %d; ",
+            "serving %d channels but ARGUS_MAX_CHANNELS is %d; "
             "the PL and telemetry frame must agree",
-            channel_count, ARGUS_MAX_CHANNELS);
+            static_cast<int>(channel_count), ARGUS_MAX_CHANNELS);
         }
       }
 
