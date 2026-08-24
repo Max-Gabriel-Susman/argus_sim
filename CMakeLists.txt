@@ -16,6 +16,10 @@ add_executable(dataset_relay_node
   src/replay_server.cpp
 )
 
+add_executable(replay_client_test src/replay_client_test.cpp)
+
+target_include_directories(replay_client_test PRIVATE ${argus_core_INCLUDE_DIRS})
+
 target_include_directories(dataset_relay_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   ${argus_core_INCLUDE_DIRS}
@@ -24,7 +28,7 @@ target_include_directories(dataset_relay_node PRIVATE
 ament_target_dependencies(dataset_relay_node rclcpp argus_core)
 ament_target_dependencies(dataset_relay_node rclcpp std_msgs argus_core)
 
-install(TARGETS dataset_relay_node
+install(TARGETS dataset_relay_node replay_client_test
   DESTINATION lib/${PROJECT_NAME}
 )
 
