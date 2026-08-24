@@ -95,8 +95,8 @@ private:
     msg.data =
       "requests=" + std::to_string(s.requests_served) +
       " retransmits=" + std::to_string(s.retransmits_served) +
-      "chunks=" + std::to_string(s.chunks_sent) +
-      "bytes=" + std::to_string(s.bytes_sent) +
+      " chunks=" + std::to_string(s.chunks_sent) +
+      " bytes=" + std::to_string(s.bytes_sent) +
       " bad=" + std::to_string(s.bad_packets) +
       " wraps=" + std::to_string(s.wraps) +
       " offset=" + std::to_string(s.last_offset) +
