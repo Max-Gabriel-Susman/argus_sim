@@ -37,10 +37,3 @@ data:
 Then exercise the protocol end to end:
 
     ros2 run argus_sim replay_client_test
-
-## Gazebo world
-
-`argus_world.launch.py` brings up a Gazebo environment intended as the task
-side of the closed loop — the consumer of decoded intent on `/cmd_vel`.
-Currently a bare world; requires `ros-humble-gazebo-ros-pkgs`, which is not a
-build dependency. Currently hidden til development matures further.
