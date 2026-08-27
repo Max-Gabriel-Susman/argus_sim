@@ -192,7 +192,7 @@ void ReplayServer::start()
   // A burst is ~21 packets back to back. Give the send buffer headroom so a
   // slow drain blocks rather than silently dropping.
   int sndbuf = 1 << 20;
-  ::setsockopt(sock_, SOL_SOCKET, SO_REUSEADDR, &sndbuf, sizeof(sndbuf));
+  ::setsockopt(sock_, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
   // Bounded recv so stop() is observed without needing to poke the socket.
   struct timeval tv {};
@@ -215,10 +215,10 @@ void ReplayServer::start()
     sock_ = -1;
     throw std::runtime_error(
             "bind " + config_.bind_addr + ":" + std::to_string(config_.port) + ": " + err);
-
-    running_.store(true);
-    thread_ = std::thread(&ReplayServer::run, this);
   }
+
+  running_.store(true);
+  thread_ = std::thread(&ReplayServer::run, this);
 }
 
 void ReplayServer::stop()
