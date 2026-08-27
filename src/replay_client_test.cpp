@@ -37,7 +37,7 @@
  #include <string>
  #include <vector>
 
- #include "argus_core/argus_replay-client.h"
+ #include "argus_core/argus_replay_client.h"
  #include "argus_core/argus_wire.h"
 
 namespace
