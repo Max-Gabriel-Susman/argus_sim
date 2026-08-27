@@ -25,7 +25,6 @@ target_include_directories(dataset_relay_node PRIVATE
   ${argus_core_INCLUDE_DIRS}
 )
 
-ament_target_dependencies(dataset_relay_node rclcpp argus_core)
 ament_target_dependencies(dataset_relay_node rclcpp std_msgs argus_core)
 
 install(TARGETS dataset_relay_node replay_client_test
