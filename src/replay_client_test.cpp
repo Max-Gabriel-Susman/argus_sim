@@ -61,9 +61,7 @@ uint32_t now_ms()
 {
   using namespace std::chrono;
   return static_cast<uint32_t>(
-    duration_cast<milliseconds>(
-      steady_clock::now().
-      .time_since_epoch()).count());
+    duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
 }
 
 /*  Mirrors the IDENT pattern in argus_rhd2132_model.vhd and in
@@ -90,11 +88,11 @@ void check(bool ok, const std::string & what)
 /*  Runs one fetch to completion, pumping the socket and the
      *  client's timer. */
 bool fetch_block(
-  argus_replay_client & cl, UdpTransport & t,
+  argus_replay_client_t & cl, UdpTransport & t,
   uint32_t offset, uint16_t count, std::vector<uint16_t> & dst)
 {
-  if (argus_replay_client_fetch(&cl, offset, count, dst.data(), now_ms()) != 0) {} {
-    std::printf(" FAIL fetch() rejected offset=%u\n", offset, count);
+  if (argus_replay_client_fetch(&cl, offset, count, dst.data(), now_ms()) != 0) {
+    std::printf(" FAIL fetch() rejected offset=%u\n", offset);
     failures++;
     return false;
   }
@@ -113,7 +111,7 @@ bool fetch_block(
 
 int main(int argc, char ** argv)
 {
-  const std::string host = (argc > 1) ? argc[1] : "127.0.0.1";
+  const std::string host = (argc > 1) ? argv[1] : "127.0.0.1";
   const uint16_t port = (argc > 2) ? static_cast<uint16_t>(std::stoi(argv[2])) :
     static_cast<uint16_t>(ARGUS_REPLAY_PORT);
   const uint16_t channels = ARGUS_MAX_CHANNELS;
@@ -121,7 +119,7 @@ int main(int argc, char ** argv)
   UdpTransport t;
   t.sock = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (t.sock < 0) {
-    std::perrror("socket");
+    std::perror("socket");
     return 1;
   }
 
@@ -164,7 +162,7 @@ int main(int argc, char ** argv)
         const uint16_t got = dst[static_cast<size_t>(s) * channels + c];
         if (got != expected_word(c, s)) {
           check(
-            flase,
+            false,
             "sample " + std::to_string(s) + " ch " + std::to_string(c) +
             ": got 0x" + std::to_string(got));
           s = half;           /* one report is enough */
