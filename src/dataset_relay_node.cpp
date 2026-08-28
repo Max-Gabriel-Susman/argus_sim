@@ -25,13 +25,14 @@ public:
   DatasetRelayNode()
   : Node("dataset_relay")
   {
-    const auto dataset_path = declare_parameter<std::string>("dataset_path", "");
-    const auto channel_count = declare_parameter<int>("channel_count", ARGUS_MAX_CHANNELS);
     const auto bind_addr = declare_parameter<std::string>("bind_addr", "0.0.0.0");
-    const auto port = declare_parameter<int>("port", ARGUS_REPLAY_PORT);
+    const auto channel_count = declare_parameter<int>("channel_count", ARGUS_MAX_CHANNELS);
+    const auto dataset_path = declare_parameter<std::string>("dataset_path", "");
+    const auto drop_mask = declare_parameter<int>("drop_mask", 0);
     const auto loop = declare_parameter<bool>("loop", true);
-    const auto synthetic_samples = declare_parameter<int>("synthetic_samples", 30000);
+    const auto port = declare_parameter<int>("port", ARGUS_REPLAY_PORT);
     const auto status_period_s = declare_parameter<double>("status_period_s", 2.0);
+    const auto synthetic_samples = declare_parameter<int>("synthetic_samples", 30000);
 
     if (channel_count <= 0 || channel_count > 4096) {
       throw std::invalid_argument("channel_count out of range");
@@ -54,6 +55,12 @@ public:
     cfg.bind_addr = bind_addr;
     cfg.port = static_cast<uint16_t>(port);
     cfg.loop = loop;
+    cfg.drop_mask = static_cast<uint32_t>(drop_mask);
+    if (drop_mask != 0) {
+      RCLCPP_WARN(
+        get_logger(), "FAULT INJECTION ACTIVE: drop_mask=0x%X -- test use only",
+        static_cast<unsigned>(drop_mask));
+    }
 
     server_ = std::make_unique<ReplayServer>(source_, cfg);
     server_->start();
