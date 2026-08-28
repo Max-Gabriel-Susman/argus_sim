@@ -323,8 +323,23 @@ void ReplayServer::handle(
     (count + samples_per_chunk_ - 1) / samples_per_chunk_);
 
   uint64_t sent_bytes = 0;
+  uint16_t sent_chunks = 0;
+  uint16_t dropped_chunks = 0;
 
   for (uint16_t index = 0; index < total_chunks; ++index) {
+    // Fault injection. Applied only to first-attempt requests, so a
+    // retransmit always lands and the client's recovery terminates. Keyed off
+    // the request flag rather than server state, so the server stays
+    // stateless and a PS reset mid-test still behaves.
+    if (config_.drop_mask != 0 &&
+      (req.flags & ARGUS_REPLAY_F_RETRANSMIT) == 0 &&
+      index < 32 &&
+      ((config_.drop_mask >> index) & 1u) != 0)
+    {
+      dropped_chunks++;
+      continue;
+    }
+
     const uint32_t start = static_cast<uint32_t>(index) * samples_per_chunk_;
     const uint16_t in_chunk = static_cast<uint16_t>(
       std::min<uint32_t>(samples_per_chunk_, count - start)
@@ -373,6 +388,7 @@ void ReplayServer::handle(
     }
 
     sent_bytes += static_cast<uint64_t>(rc);
+    sent_chunks++;
   }
 
   const auto * peer = static_cast<const struct sockaddr_in *>(peer_raw);
