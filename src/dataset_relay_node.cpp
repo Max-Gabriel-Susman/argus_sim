@@ -103,6 +103,7 @@ private:
       "requests=" + std::to_string(s.requests_served) +
       " retransmits=" + std::to_string(s.retransmits_served) +
       " chunks=" + std::to_string(s.chunks_sent) +
+      " dropped=" + std::to_string(s.chunks_dropped) +
       " bytes=" + std::to_string(s.bytes_sent) +
       " bad=" + std::to_string(s.bad_packets) +
       " wraps=" + std::to_string(s.wraps) +
