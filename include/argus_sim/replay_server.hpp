@@ -45,13 +45,14 @@ private:
 
 struct ReplayStats
 {
+  uint64_t bad_packets {0};
+  uint64_t bytes_sent {0};
+  uint64_t chunks_dropped {0};
+  uint64_t chunks_sent {0};
+  uint64_t last_offset {0};
   uint64_t requests_served {0};
   uint64_t retransmits_served {0};
-  uint64_t chunks_sent {0};
-  uint64_t bytes_sent {0};
-  uint64_t bad_packets {0};
   uint64_t wraps {0};
-  uint64_t last_offset {0};
   std::string last_peer;
 };
 
