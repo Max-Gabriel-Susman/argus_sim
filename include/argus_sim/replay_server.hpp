@@ -61,6 +61,7 @@ public:
   struct Config
   {
     std::string bind_addr {"0.0.0.0"};
+    uint32_t drop_mask {0}; /* test only: bit N drops chunk N on first attempt */
     uint16_t port {0};
     bool loop {true};
     uint16_t max_samples_per_request {0};
