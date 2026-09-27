@@ -171,12 +171,16 @@ def hpf_coefficients(hp_hz, fs, order):
 
 
 def run_fixed(codes, q, order, bin_len, mult_num, mult_shift, ms_shift, ms_shift_fast,
-              refrac_len, warmup, winsorize, bipolar):
+              refrac_len, warmup, winsorize, bipolar, keep_y=0, progress=None):
     """The arithmetic block above, vectorised across channels, looped over
     samples. int64 throughout so nothing overflows in the model; the RTL
-    widths are in the header."""
+    widths are in the header.
+
+    codes may be a uint16 memmap: rows are converted one at a time, so a
+    multi-minute file costs no more memory than a ten-second one. The
+    filtered signal is returned only for the first keep_y rows.
+    """
     n, nch = codes.shape
-    x = codes.astype(np.int64) - RHD_ZERO
 
     x1 = np.zeros(nch, dtype=np.int64)     # x[n-1]
     ya1 = np.zeros(nch, dtype=np.int64)    # stage a output, previous
@@ -191,12 +195,14 @@ def run_fixed(codes, q, order, bin_len, mult_num, mult_shift, ms_shift, ms_shift
     n_bins = n // bin_len
     counts = np.zeros((n_bins, nch), dtype=np.int64)
     powers = np.zeros((n_bins, nch), dtype=np.int64)
-    y_out = np.zeros((n, nch), dtype=np.int64)
+    y_out = np.zeros((min(keep_y, n), nch), dtype=np.int64)
 
     B0, A1 = q["B0"], q["A1"]
 
     for i in range(n):
-        xi = x[i]
+        if progress is not None and (i & 0x3FFFF) == 0 and i:
+            progress(i, n)
+        xi = codes[i].astype(np.int64) - RHD_ZERO
 
         if order == 1:
             y = (B0 * (xi - x1) + A1 * y1 + (1 << 14)) >> 15
@@ -220,7 +226,8 @@ def run_fixed(codes, q, order, bin_len, mult_num, mult_shift, ms_shift, ms_shift
         power += sq
         refrac = np.where(cross, refrac_len, np.maximum(refrac - 1, 0))
 
-        y_out[i] = y
+        if i < keep_y:
+            y_out[i] = y
         x1 = xi
         y1 = y
         below_prev = below
@@ -240,7 +247,7 @@ def main():
     if args.warmup is None:
         args.warmup = 1 << args.ms_shift
 
-    raw = np.fromfile(args.bin, dtype="<u2")
+    raw = np.memmap(args.bin, dtype="<u2", mode="r")
     if raw.size % CHANNELS != 0:
         sys.exit(f"{args.bin}: {raw.size} words is not a multiple of {CHANNELS}")
     codes = raw.reshape(-1, CHANNELS)
@@ -259,17 +266,21 @@ def main():
           f"refractory {args.refrac}; warm-up {args.warmup}; "
           f"EMA input {'raw sq' if args.no_winsorize else 'min(sq, T)'}")
 
+    # The float cross-check runs on a prefix so a long file stays cheap.
+    check_n = min(n, 300000)
+    keep_y = max(check_n, args.trace_samples if args.trace else 0)
+
     counts, powers, y_fixed = run_fixed(
         codes, q, args.hp_order, args.bin_len, mult_num, mult_shift,
         args.ms_shift, args.ms_shift_fast, args.refrac, args.warmup,
-        not args.no_winsorize, args.bipolar)
+        not args.no_winsorize, args.bipolar, keep_y=keep_y)
 
-    y_float = codes.astype(np.float64) - RHD_ZERO
+    y_float = codes[:check_n].astype(np.float64) - RHD_ZERO
     for _ in range(args.hp_order):
         y_float = signal.lfilter(b, a, y_float, axis=0)
-    err = np.abs(y_fixed - y_float)
-    print(f"  fixed vs float HPF: max |err| {err.max():.2f} codes, "
-          f"mean {err.mean():.3f} (rounded per step; ~0.7 codes per section is normal)")
+    err = np.abs(y_fixed[:check_n] - y_float)
+    print(f"  fixed vs float HPF over the first {check_n} samples: max |err| {err.max():.2f} "
+          f"codes, mean {err.mean():.3f} (rounded per step; ~0.7 codes per section is normal)")
 
     n_bins = counts.shape[0]
     counted_s = max(n - args.warmup, 1) / args.fs
@@ -300,7 +311,7 @@ def main():
 
     if args.trace:
         c = args.trace_channel
-        m = min(args.trace_samples, n)
+        m = min(args.trace_samples, n, y_fixed.shape[0])
         with open(args.trace, "w", encoding="ascii") as f:
             f.write(f"# code y  -- channel {c}, first {m} samples, ORDER={args.hp_order} "
                     + " ".join(f"{k}={v}" for k, v in q.items()) + "\n")
