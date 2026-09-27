@@ -32,8 +32,20 @@ the other)
                                                HPF gain <= 1 so |y| <= 32768;
                                                RTL: 18-bit signed
   sq[n]  = y[n] * y[n]                         <= 2^30; RTL: 32-bit unsigned
-  ms[n]  = ms[n-1] + ((sq[n] - ms[n-1] + 2^(k-1)) >> k)
-                                               EMA of sq, rounded: the floor
+  u[n]   = min(sq[n], T[n-1])  after the fast-attack phase, else sq[n]
+                                               Winsorised: a sample over the
+                                               previous threshold feeds the
+                                               EMA the threshold, not its own
+                                               square. Otherwise a busy
+                                               channel's spikes inflate its
+                                               own RMS -- ~35% at 35 Hz with
+                                               5 sigma units -- and the
+                                               threshold climbs on exactly
+                                               the channels that matter.
+                                               RTL: one mux on a comparator
+                                               that already exists.
+  ms[n]  = ms[n-1] + ((u[n] - ms[n-1] + 2^(k-1)) >> k)
+                                               EMA of u, rounded: the floor
                                                alone biases ms low by 2^(k-1),
                                                which at K=15 is ~40% of a
                                                typical mean-square and turns
@@ -97,6 +109,8 @@ def parse_args():
                    help="EMA shift K while tracking; time constant 2^K samples (default 15 = 1.09 s)")
     p.add_argument("--ms-shift-fast", type=int, default=8,
                    help="EMA shift for the first 2^K samples (default 8: settled in ~1000 samples)")
+    p.add_argument("--no-winsorize", action="store_true",
+                   help="feed the EMA raw sq instead of min(sq, T); spikes then inflate their own threshold")
     p.add_argument("--refrac", type=int, default=30,
                    help="refractory samples after a crossing (default 30 = 1 ms)")
     p.add_argument("--warmup", type=int, default=None,
@@ -132,7 +146,7 @@ def hpf_coefficients(hp_hz, fs):
 
 
 def run_fixed(codes, b0_q, a1_q, bin_len, mult_num, mult_shift, ms_shift, ms_shift_fast,
-              refrac_len, warmup):
+              refrac_len, warmup, winsorize):
     """The arithmetic block above, vectorised across channels, looped over
     samples. int64 throughout so nothing overflows in the model; the RTL
     widths are in the header."""
@@ -142,6 +156,7 @@ def run_fixed(codes, b0_q, a1_q, bin_len, mult_num, mult_shift, ms_shift, ms_shi
     y_prev = np.zeros(nch, dtype=np.int64)
     x_prev = np.zeros(nch, dtype=np.int64)
     ms = np.zeros(nch, dtype=np.int64)
+    thr = np.zeros(nch, dtype=np.int64)
     below_prev = np.zeros(nch, dtype=bool)
     refrac = np.zeros(nch, dtype=np.int64)
     count = np.zeros(nch, dtype=np.int64)
@@ -157,8 +172,10 @@ def run_fixed(codes, b0_q, a1_q, bin_len, mult_num, mult_shift, ms_shift, ms_shi
         d = xi - x_prev
         y = (b0_q * d + a1_q * y_prev + (1 << 14)) >> 15
         sq = y * y
-        k = ms_shift_fast if i < (1 << ms_shift) else ms_shift
-        ms = ms + ((sq - ms + (1 << (k - 1))) >> k)
+        fast = i < (1 << ms_shift)
+        k = ms_shift_fast if fast else ms_shift
+        u = sq if (fast or not winsorize) else np.minimum(sq, thr)
+        ms = ms + ((u - ms + (1 << (k - 1))) >> k)
         thr = (mult_num * ms) >> mult_shift
 
         below = (y < 0) & (sq > thr)
@@ -203,11 +220,13 @@ def main():
     print(f"  threshold {args.mult}xRMS -> MULT_NUM={mult_num} MULT_SHIFT={mult_shift}; "
           f"EMA shift {args.ms_shift_fast} then {args.ms_shift} "
           f"({(1 << args.ms_shift) / args.fs:.2f} s); "
-          f"refractory {args.refrac}; warm-up {args.warmup}")
+          f"refractory {args.refrac}; warm-up {args.warmup}; "
+          f"EMA input {'raw sq' if args.no_winsorize else 'min(sq, T)'}")
 
     counts, powers, y_fixed = run_fixed(
         codes, b0_q, a1_q, args.bin_len, mult_num, mult_shift,
-        args.ms_shift, args.ms_shift_fast, args.refrac, args.warmup)
+        args.ms_shift, args.ms_shift_fast, args.refrac, args.warmup,
+        not args.no_winsorize)
 
     # Float reference for the filter alone.
     x_f = codes.astype(np.float64) - RHD_ZERO
@@ -235,7 +254,7 @@ def main():
             f.write(f"# bin ch count power  -- {n_bins} bins x {CHANNELS} ch, "
                     f"B0={b0_q} A1={a1_q} NUM={mult_num} SHIFT={mult_shift} "
                     f"K={args.ms_shift} K_FAST={args.ms_shift_fast} REFRAC={args.refrac} "
-                    f"WARMUP={args.warmup}\n")
+                    f"WARMUP={args.warmup} WINSOR={0 if args.no_winsorize else 1}\n")
             for bi in range(n_bins):
                 for c in range(CHANNELS):
                     f.write(f"{bi} {c} {counts[bi, c]} {powers[bi, c]}\n")
