@@ -34,6 +34,13 @@ the .mat's cursor data spans 1288..1487, so --start 10 --seconds 199. The
 model runs once and its features are cached beside the .bin; rerunning
 with different classifier options is then instant.
 
+--save-model PATH pickles a pipeline for inference_node (ARGUS_MODEL_PATH):
+the same StandardScaler -> LDA, fitted on every usable bin of the chosen
+--features, next to a dict describing the layout it expects. Power is
+converted to what the wire carries, mean-square in ADC code^2 (the model's
+per-bin sum over bin_len), which does not depend on bin length, so a model
+fitted here on 24,414 Hz bins applies to the fabric's 1500-sweep bins.
+
 If model tracks mat-u1 within a few points, the feature stream is validated
 for its purpose and the RTL contract in spike_features.py is final. If it
 is far below, the detector's parameters need revisiting -- with this as
@@ -44,6 +51,7 @@ import argparse
 import hashlib
 import math
 import os
+import pickle
 import sys
 import time
 import warnings
@@ -87,6 +95,9 @@ def parse_args():
                    help="LDA solver=lsqr shrinkage=auto instead of inference_node's default svd")
     p.add_argument("--seed", type=int, default=7, help="split seed (inference_node uses 7)")
     p.add_argument("--no-cache", action="store_true")
+    p.add_argument("--save-model", metavar="PATH",
+                   help="pickle the --features pipeline, fitted on every usable bin, "
+                        "with its feature layout, for inference_node's ARGUS_MODEL_PATH")
     return p.parse_args()
 
 
@@ -194,6 +205,26 @@ def fit_score(X, y, seed, shrinkage):
     return split_acc, scores.mean(), scores.std()
 
 
+def save_model(path, args, counts, powers, y, bin_len):
+    """Fit on every usable bin and pickle the pipeline with its layout.
+
+    Power goes in as mean-square, what the v3 wire frame carries.
+    """
+    names = {"counts": ["counts"], "power": ["power"], "both": ["counts", "power"]}[args.features]
+    parts = {"counts": counts.astype(np.float32),
+             "power": (powers / float(bin_len)).astype(np.float32)}
+    X = np.hstack([parts[n] for n in names])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipe = make_pipe(args.shrinkage).fit(X, y)
+    layout = {"features": names, "channels": CHANNELS, "bin_len": bin_len, "mult": args.mult,
+              "fs": args.fs, "bin_s": args.bin_s, "power_units": "mean-square code^2"}
+    with open(path, "wb") as f:
+        pickle.dump({"pipeline": pipe, "layout": layout}, f)
+    print(f"\n  saved {path}: {X.shape[1]} features {names}, fitted on {X.shape[0]} bins; "
+          f"layout {layout}")
+
+
 def main():
     args = parse_args()
 
@@ -254,6 +285,9 @@ def main():
     rng = np.random.default_rng(args.seed)
     s_acc, cv_m, cv_s = fit_score(feats, rng.permutation(y), args.seed, args.shrinkage)
     print(f"  {'model, labels shuffled (chance)':<40} {100 * s_acc:11.1f}% {100 * cv_m:11.1f} +- {100 * cv_s:4.1f}%")
+
+    if args.save_model:
+        save_model(args.save_model, args, counts[keep], powers[keep], y, bin_len)
 
 
 if __name__ == "__main__":
