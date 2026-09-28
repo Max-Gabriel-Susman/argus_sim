@@ -96,6 +96,8 @@ Outputs
             line records every parameter that produced it.
   --trace   the first --trace-samples of y for --trace-channel, one per
             line, for a filter-only unit test
+  --stim    the first --stim-rows rows of codes as text, one sweep per
+            line, the stimulus tb_argus_feature drives into the block
 """
 
 import argparse
@@ -135,6 +137,8 @@ def parse_args():
     p.add_argument("--trace", help="write the filtered signal of one channel")
     p.add_argument("--trace-channel", type=int, default=0)
     p.add_argument("--trace-samples", type=int, default=4096)
+    p.add_argument("--stim", help="write the first --stim-rows rows as text for tb_argus_feature")
+    p.add_argument("--stim-rows", type=int, default=48000)
     return p.parse_args()
 
 
@@ -318,6 +322,11 @@ def main():
             for i in range(m):
                 f.write(f"{codes[i, c]} {y_fixed[i, c]}\n")
         print(f"  wrote {args.trace}: channel {c}, {m} samples")
+
+    if args.stim:
+        m = min(args.stim_rows, n)
+        np.savetxt(args.stim, codes[:m], fmt="%d")
+        print(f"  wrote {args.stim}: {m} rows for tb_argus_feature")
 
 
 if __name__ == "__main__":
