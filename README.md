@@ -48,6 +48,22 @@ python3 $T/decode_test.py ~/argus_data/indy_20161005_06_s10_374s_24k.bin \
 About two and a half minutes; the model's features are cached beside the
 `.bin`, so classifier variants after that are instant.
 
+To run that model live, add `--save-model PATH`. It pickles the pipeline for
+the chosen `--features`, fitted on every usable bin, together with a small
+dict describing the feature layout it expects (`features`, `channels`,
+`bin_len`, `mult`, `fs`, `bin_s`, `power_units`). Power goes into the saved
+model as mean-square (the per-bin sum ÷ `bin_len`), which is what the wire
+carries (see below) and what makes a model fitted on 1221-sample native-rate
+bins valid on the fabric's 1500-sweep bins. Point `inference_node` at it:
+
+```bash
+python3 $T/decode_test.py ... --mult 3.5 --features both --save-model ~/argus_model.pkl
+ARGUS_MODEL_PATH=~/argus_model.pkl ros2 run argus_inference inference_node
+```
+
+`inference_node` then builds `[counts..., power...]` from each `NeuralFrame`
+instead of training on the `.mat` at startup, and logs which path is active.
+
 ## The parameters, as locked
 
 These are the RTL generics. The arithmetic they parameterise is the header
@@ -78,6 +94,24 @@ python3 $T/spike_features.py ~/argus_data/indy_20161005_06_s120_10s.bin --mult 3
 The golden's header line records every parameter above. `tb_argus_feature`
 must reproduce every `(bin, channel, count, power)` line exactly; the model
 is bit-exact, so any mismatch is a bug in one of the two.
+
+There is no `--stim` any more: the bench reads the raw `.bin` itself as its
+stimulus, so a golden and its stimulus are one file plus this script's
+output. CI runs the same check on a small pair checked into
+`argus-neural-codec/sim/data/`: the first 6000 sweeps of this segment and
+their golden at a 2048-sweep warm-up and 100-sweep bins, 5760
+`(bin, channel)` pairs:
+
+```bash
+head -c $((6000*96*2)) ~/argus_data/indy_20161005_06_s120_10s.bin > sim/data/feature_ci.dat
+python3 $T/spike_features.py sim/data/feature_ci.dat \
+    --mult 3.5 --ms-shift 11 --warmup 2048 --bin 100 \
+    --golden sim/data/feature_ci_golden.txt
+```
+
+Every derived file and the command that makes it is listed in the
+[argus_data](https://github.com/Max-Gabriel-Susman/argus_data) repository
+(`scripts/derive.sh`).
 
 ## How the parameters were chosen — and the wrong turn
 
@@ -118,20 +152,19 @@ Neither would have been visible from RTL.
 ## What power forces on the wire
 
 Power is half the accuracy, so the fabric emits it and the firmware sends it.
-`NeuralFrame` today is `uint16[96] channels`; crossing counts fit that (a
-busy channel is single digits per bin) and are exactly the format
-`inference_node` trained on, which is why the decoder consumes them with no
-adapter. Power does not fit: the fabric accumulates a 48-bit sum of squares
-per bin.
+Crossing counts fit `uint16[96] channels` (a busy channel is single digits
+per bin). Power does not: the fabric accumulates a 48-bit sum of squares per
+bin, which reaches 1.3e11 on this session.
 
-Proposal: the fabric's feature bank holds `count` (16 bits) and the raw sum
-(48 bits) per channel; the firmware sends `power[c] = sum / BIN` as a
-`uint32` — mean squared spike-band voltage in ADC code², Willett's
-`spikePow` up to a constant. `NeuralFrame` gains `uint32[96] power`, the
-message version bumps, and `StandardScaler` in the decoder makes sum-vs-mean
-irrelevant. This is the fixed-96 parameterisation question arriving with a
-reason; decide it before the feature bank's AXI layout is fixed, because
-the firmware will read both fields.
+The fabric's feature bank holds `count` (16 bits) and the raw sum (48 bits)
+per channel, and wire frame version 3 (`argus_wire.h`, 594 bytes) carries
+`uint32_t power[96]` after `channels`: `power[c] = sum / BIN`, mean squared
+spike-band voltage in ADC code², Willett's `spikePow` up to a constant, at
+most ~1.1e8 here. `NeuralFrame` has `uint32[96] power` to match, and
+`neural_udp_receiver` accepts version 3 only. Within one bin length
+`StandardScaler` makes sum-vs-mean irrelevant; across bin lengths (a model
+fitted at 24,414 Hz, run on the fabric's 30,012 Hz bins) the mean is what
+keeps the scale right, so `--save-model` fits on it too.
 
 ## Notes on the data path
 
