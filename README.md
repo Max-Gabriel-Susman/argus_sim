@@ -11,6 +11,7 @@ run on files in `~/argus_data/`.
 | `spike_features.py` | the bit-exact fixed-point model of the fabric's feature extraction; writes the GHDL golden |
 | `validate_features.py` | model crossings vs the lab's spike sorting, same window, same clock |
 | `decode_test.py` | model features vs the lab's features, through `inference_node`'s classifier |
+| `hw_bitexact.py` | the board's NeuralFrames during a replay run vs this model on the same `.bin`, exactly |
 
 ## The result
 
@@ -108,6 +109,22 @@ python3 $T/spike_features.py sim/data/feature_ci.dat \
     --mult 3.5 --ms-shift 11 --warmup 2048 --bin 100 \
     --golden sim/data/feature_ci_golden.txt
 ```
+
+The same check on silicon is `hw_bitexact.py`. It records the frames the
+receiver publishes during a hardware run, then compares their counts and
+`sum / 1500` power with `run_fixed` on the replay `.bin`, starting from
+sample 0 at the soft reset that begins streaming:
+
+```bash
+python3 $T/hw_bitexact.py capture /tmp/cap.npz --seconds 170 &
+~/Documents/argus_ws/src/argus_bringup/scripts/hwtest.sh --seconds 90
+python3 $T/hw_bitexact.py compare ~/argus_data/indy_20161005_06_s120_10s.bin /tmp/cap.npz
+```
+
+On 2026-09-28 the first 100 bins matched 100%, and so did the whole
+capture: 1450 bins, seven loops of the file, 139200 counts and 139200
+powers. The replay must be underrun-free over the compared window. Check
+that `underruns` holds still in the `stream:` lines of the hwtest log.
 
 Every derived file and the command that makes it is listed in the
 [argus_data](https://github.com/Max-Gabriel-Susman/argus_data) repository
