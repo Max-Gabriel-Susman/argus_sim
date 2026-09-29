@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-decode_test.py -- does the fixed-point feature stream decode?
+decode_test.py -- test whether the fixed-point feature stream decodes.
 
 The bar for the codec's feature extraction is not "match the lab's spike
 sorter" -- a threshold detector cannot, and Willett's whole result is that
@@ -59,7 +59,7 @@ import warnings
 import h5py
 import numpy as np
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import cross_val_score, StratifiedKFold, train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -70,33 +70,33 @@ CHANNELS = 96
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    p.add_argument("bin", help="broadband .bin at native rate, covering the .mat window")
-    p.add_argument("mat", help="indy_20161005_06.mat (v7.3)")
-    p.add_argument("--start", type=float, required=True,
-                   help="seconds into the broadband the .bin starts (nwb_to_replay --start)")
-    p.add_argument("--t0", type=float, required=True,
-                   help="broadband first timestamp (nwb_to_replay prints t0)")
-    p.add_argument("--fs", type=float, default=24414.0625, help="the .bin's sample rate")
-    p.add_argument("--bin-s", type=float, default=0.05, help="bin length, seconds (default 0.05)")
+    p = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    p.add_argument('bin', help='broadband .bin at native rate, covering the .mat window')
+    p.add_argument('mat', help='indy_20161005_06.mat (v7.3)')
+    p.add_argument('--start', type=float, required=True,
+                   help='seconds into the broadband the .bin starts (nwb_to_replay --start)')
+    p.add_argument('--t0', type=float, required=True,
+                   help='broadband first timestamp (nwb_to_replay prints t0)')
+    p.add_argument('--fs', type=float, default=24414.0625, help="the .bin's sample rate")
+    p.add_argument('--bin-s', type=float, default=0.05, help='bin length, seconds (default 0.05)')
     # model parameters, spike_features defaults
-    p.add_argument("--hp-hz", type=float, default=250.0)
-    p.add_argument("--hp-order", type=int, default=1, choices=(1, 2))
-    p.add_argument("--mult", type=float, default=4.5)
-    p.add_argument("--bipolar", action="store_true")
-    p.add_argument("--ms-shift", type=int, default=15)
-    p.add_argument("--ms-shift-fast", type=int, default=8)
-    p.add_argument("--no-winsorize", action="store_true")
-    p.add_argument("--refrac", type=int, default=30)
+    p.add_argument('--hp-hz', type=float, default=250.0)
+    p.add_argument('--hp-order', type=int, default=1, choices=(1, 2))
+    p.add_argument('--mult', type=float, default=4.5)
+    p.add_argument('--bipolar', action='store_true')
+    p.add_argument('--ms-shift', type=int, default=15)
+    p.add_argument('--ms-shift-fast', type=int, default=8)
+    p.add_argument('--no-winsorize', action='store_true')
+    p.add_argument('--refrac', type=int, default=30)
     # classifier
-    p.add_argument("--features", choices=("counts", "power", "both"), default="counts",
-                   help="model feature set (default counts, matching inference_node)")
-    p.add_argument("--shrinkage", action="store_true",
+    p.add_argument('--features', choices=('counts', 'power', 'both'), default='counts',
+                   help='model feature set (default counts, matching inference_node)')
+    p.add_argument('--shrinkage', action='store_true',
                    help="LDA solver=lsqr shrinkage=auto instead of inference_node's default svd")
-    p.add_argument("--seed", type=int, default=7, help="split seed (inference_node uses 7)")
-    p.add_argument("--no-cache", action="store_true")
-    p.add_argument("--save-model", metavar="PATH",
-                   help="pickle the --features pipeline, fitted on every usable bin, "
+    p.add_argument('--seed', type=int, default=7, help='split seed (inference_node uses 7)')
+    p.add_argument('--no-cache', action='store_true')
+    p.add_argument('--save-model', metavar='PATH',
+                   help='pickle the --features pipeline, fitted on every usable bin, '
                         "with its feature layout, for inference_node's ARGUS_MODEL_PATH")
     return p.parse_args()
 
@@ -104,15 +104,15 @@ def parse_args():
 # --- .mat, mirroring inference_node ---------------------------------------
 
 def load_mat_behaviour(path):
-    with h5py.File(path, "r") as f:
-        t = np.array(f["/t"]).squeeze().astype(np.float64)
-        cursor = np.array(f["/cursor_pos"]).T.astype(np.float64)
-        target = np.array(f["/target_pos"]).T.astype(np.float64)
+    with h5py.File(path, 'r') as f:
+        t = np.array(f['/t']).squeeze().astype(np.float64)
+        cursor = np.array(f['/cursor_pos']).T.astype(np.float64)
+        target = np.array(f['/target_pos']).T.astype(np.float64)
     return t, cursor, target
 
 
 def labels_for(bin_times, t, cursor, target):
-    idx = np.searchsorted(t, bin_times, side="left")
+    idx = np.searchsorted(t, bin_times, side='left')
     idx = np.clip(idx, 0, t.shape[0] - 1)
     vec = target[idx] - cursor[idx]
     ang = np.arctan2(vec[:, 1], vec[:, 0])
@@ -124,12 +124,12 @@ def labels_for(bin_times, t, cursor, target):
 
 
 def bin_mat_spikes(path, edges, nch):
-    """Counts per bin per channel: unit 1 only, and all units."""
+    """Count spikes per bin per channel: unit 1 only, and all units."""
     n_bins = edges.shape[0] - 1
     u1 = np.zeros((n_bins, nch), dtype=np.float32)
     allu = np.zeros((n_bins, nch), dtype=np.float32)
-    with h5py.File(path, "r") as f:
-        refs = np.array(f["/spikes"])
+    with h5py.File(path, 'r') as f:
+        refs = np.array(f['/spikes'])
         n_units, n_ch = refs.shape
         for c in range(min(nch, n_ch)):
             for u in range(n_units):
@@ -149,22 +149,22 @@ def bin_mat_spikes(path, edges, nch):
 # --- model, cached ----------------------------------------------------------
 
 def model_features(args, codes, bin_len):
-    key = (f"{os.path.getsize(args.bin)}|{args.fs}|{bin_len}|{args.hp_hz}|{args.hp_order}|"
-           f"{args.mult}|{args.bipolar}|{args.ms_shift}|{args.ms_shift_fast}|"
-           f"{args.no_winsorize}|{args.refrac}")
+    key = (f'{os.path.getsize(args.bin)}|{args.fs}|{bin_len}|{args.hp_hz}|{args.hp_order}|'
+           f'{args.mult}|{args.bipolar}|{args.ms_shift}|{args.ms_shift_fast}|'
+           f'{args.no_winsorize}|{args.refrac}')
     tag = hashlib.sha1(key.encode()).hexdigest()[:10]
-    cache = f"{args.bin}.features.{tag}.npz"
+    cache = f'{args.bin}.features.{tag}.npz'
 
     if not args.no_cache and os.path.exists(cache):
         z = np.load(cache)
-        print(f"  model features from cache {os.path.basename(cache)}")
-        return z["counts"], z["powers"], int(z["warmup"])
+        print(f'  model features from cache {os.path.basename(cache)}')
+        return z['counts'], z['powers'], int(z['warmup'])
 
     b, a, q, section_hz = sf.hpf_coefficients(args.hp_hz, args.fs, args.hp_order)
     num, shift = sf.mult_to_rational(args.mult)
     warmup = 1 << args.ms_shift
     n = codes.shape[0]
-    print(f"  running model on {n} samples ({n / args.fs:.0f} s): "
+    print(f'  running model on {n} samples ({n / args.fs:.0f} s): '
           f"B0={q['B0']} A1={q['A1']} NUM={num} SHIFT={shift} K={args.ms_shift} "
           f"order {args.hp_order}{' bipolar' if args.bipolar else ''}")
 
@@ -172,13 +172,13 @@ def model_features(args, codes, bin_len):
 
     def progress(i, total):
         el = time.time() - t_start
-        print(f"    {100 * i / total:3.0f}%  {el:.0f} s elapsed, ~{el * (total / i - 1):.0f} s left",
-              flush=True)
+        print(f'    {100 * i / total:3.0f}%  {el:.0f} s elapsed, '
+              f'~{el * (total / i - 1):.0f} s left', flush=True)
 
     counts, powers, _ = sf.run_fixed(
         codes, q, args.hp_order, bin_len, num, shift, args.ms_shift, args.ms_shift_fast,
         args.refrac, warmup, not args.no_winsorize, args.bipolar, keep_y=0, progress=progress)
-    print(f"    done in {time.time() - t_start:.0f} s")
+    print(f'    done in {time.time() - t_start:.0f} s')
 
     if not args.no_cache:
         np.savez_compressed(cache, counts=counts, powers=powers, warmup=warmup)
@@ -188,14 +188,14 @@ def model_features(args, codes, bin_len):
 # --- classifier, mirroring inference_node -----------------------------------
 
 def make_pipe(shrinkage):
-    lda = (LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto") if shrinkage
+    lda = (LinearDiscriminantAnalysis(solver='lsqr', shrinkage='auto') if shrinkage
            else LinearDiscriminantAnalysis())
     return make_pipeline(StandardScaler(with_mean=True, with_std=True), lda)
 
 
 def fit_score(X, y, seed, shrinkage):
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")   # collinear dead channels; sklearn copes
+        warnings.simplefilter('ignore')   # collinear dead channels; sklearn copes
         X_tr, X_te, y_tr, y_te = train_test_split(
             X, y, test_size=0.2, random_state=seed, stratify=y)
         pipe = make_pipe(shrinkage).fit(X_tr, y_tr)
@@ -206,37 +206,38 @@ def fit_score(X, y, seed, shrinkage):
 
 
 def save_model(path, args, counts, powers, y, bin_len):
-    """Fit on every usable bin and pickle the pipeline with its layout.
+    """
+    Fit on every usable bin and pickle the pipeline with its layout.
 
     Power goes in as mean-square, what the v3 wire frame carries.
     """
-    names = {"counts": ["counts"], "power": ["power"], "both": ["counts", "power"]}[args.features]
-    parts = {"counts": counts.astype(np.float32),
-             "power": (powers / float(bin_len)).astype(np.float32)}
+    names = {'counts': ['counts'], 'power': ['power'], 'both': ['counts', 'power']}[args.features]
+    parts = {'counts': counts.astype(np.float32),
+             'power': (powers / float(bin_len)).astype(np.float32)}
     X = np.hstack([parts[n] for n in names])
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+        warnings.simplefilter('ignore')
         pipe = make_pipe(args.shrinkage).fit(X, y)
-    layout = {"features": names, "channels": CHANNELS, "bin_len": bin_len, "mult": args.mult,
-              "fs": args.fs, "bin_s": args.bin_s, "power_units": "mean-square code^2"}
-    with open(path, "wb") as f:
-        pickle.dump({"pipeline": pipe, "layout": layout}, f)
-    print(f"\n  saved {path}: {X.shape[1]} features {names}, fitted on {X.shape[0]} bins; "
-          f"layout {layout}")
+    layout = {'features': names, 'channels': CHANNELS, 'bin_len': bin_len, 'mult': args.mult,
+              'fs': args.fs, 'bin_s': args.bin_s, 'power_units': 'mean-square code^2'}
+    with open(path, 'wb') as f:
+        pickle.dump({'pipeline': pipe, 'layout': layout}, f)
+    print(f'\n  saved {path}: {X.shape[1]} features {names}, fitted on {X.shape[0]} bins; '
+          f'layout {layout}')
 
 
 def main():
     args = parse_args()
 
-    raw = np.memmap(args.bin, dtype="<u2", mode="r")
+    raw = np.memmap(args.bin, dtype='<u2', mode='r')
     if raw.size % CHANNELS != 0:
-        sys.exit(f"{args.bin}: {raw.size} words is not a multiple of {CHANNELS}")
+        sys.exit(f'{args.bin}: {raw.size} words is not a multiple of {CHANNELS}')
     codes = raw.reshape(-1, CHANNELS)
     n = codes.shape[0]
     bin_len = int(round(args.bin_s * args.fs))
     n_bins = n // bin_len
-    print(f"{args.bin}: {n} samples, {n / args.fs:.1f} s at {args.fs:.4f} Hz, "
-          f"{n_bins} bins of {bin_len} samples ({bin_len / args.fs * 1000:.2f} ms)")
+    print(f'{args.bin}: {n} samples, {n / args.fs:.1f} s at {args.fs:.4f} Hz, '
+          f'{n_bins} bins of {bin_len} samples ({bin_len / args.fs * 1000:.2f} ms)')
 
     counts, powers, warmup = model_features(args, codes, bin_len)
 
@@ -251,44 +252,45 @@ def main():
     keep = np.zeros(n_bins, dtype=bool)
     keep[skip:] = True
     keep &= (centres >= t[0]) & (centres <= t[-1])
-    print(f"  window {edges[0]:.1f}..{edges[-1]:.1f} s; .mat behaviour {t[0]:.1f}..{t[-1]:.1f} s; "
-          f"{skip} warm-up bins dropped; {keep.sum()} bins usable")
+    print(f'  window {edges[0]:.1f}..{edges[-1]:.1f} s; .mat behaviour {t[0]:.1f}..{t[-1]:.1f} s; '
+          f'{skip} warm-up bins dropped; {keep.sum()} bins usable')
     if keep.sum() < 200:
-        sys.exit("too few usable bins -- is the .bin covering the .mat window? (see --start)")
+        sys.exit('too few usable bins -- is the .bin covering the .mat window? (see --start)')
 
     y = labels_for(centres[keep], t, cursor, target)
     classes, freq = np.unique(y, return_counts=True)
     chance = freq.max() / freq.sum()
-    print(f"  labels: " + ", ".join(f"{c}:{k}" for c, k in zip(classes, freq))
-          + f"  (majority class {100 * chance:.1f}%)")
+    print('  labels: ' + ', '.join(f'{c}:{k}' for c, k in zip(classes, freq))
+          + f'  (majority class {100 * chance:.1f}%)')
 
     u1, allu = bin_mat_spikes(args.mat, edges, CHANNELS)
 
     Xm_counts = counts[keep].astype(np.float32)
     Xm_power = powers[keep].astype(np.float32)
-    feats = {"counts": Xm_counts, "power": Xm_power,
-             "both": np.hstack([Xm_counts, Xm_power])}[args.features]
+    feats = {'counts': Xm_counts, 'power': Xm_power,
+             'both': np.hstack([Xm_counts, Xm_power])}[args.features]
     sets = [
-        (f"model ({args.features})", feats),
+        (f'model ({args.features})', feats),
         ("mat-u1  (inference_node's features)", u1[keep]),
-        ("mat-all (every unit incl. hash)", allu[keep]),
+        ('mat-all (every unit incl. hash)', allu[keep]),
     ]
-    print(f"  model: {int(counts[keep].sum())} crossings, "
-          f"{np.count_nonzero(counts[keep].sum(axis=0))} ch nonzero; "
-          f"mat-u1 {int(u1[keep].sum())}, mat-all {int(allu[keep].sum())} spikes")
+    print(f'  model: {int(counts[keep].sum())} crossings, '
+          f'{np.count_nonzero(counts[keep].sum(axis=0))} ch nonzero; '
+          f'mat-u1 {int(u1[keep].sum())}, mat-all {int(allu[keep].sum())} spikes')
 
     print(f"\n  {'features':<40} {'80/20 split':>12} {'5-fold CV':>18}")
     for name, X in sets:
         s_acc, cv_m, cv_s = fit_score(X, y, args.seed, args.shrinkage)
-        print(f"  {name:<40} {100 * s_acc:11.1f}% {100 * cv_m:11.1f} +- {100 * cv_s:4.1f}%")
+        print(f'  {name:<40} {100 * s_acc:11.1f}% {100 * cv_m:11.1f} +- {100 * cv_s:4.1f}%')
 
     rng = np.random.default_rng(args.seed)
     s_acc, cv_m, cv_s = fit_score(feats, rng.permutation(y), args.seed, args.shrinkage)
-    print(f"  {'model, labels shuffled (chance)':<40} {100 * s_acc:11.1f}% {100 * cv_m:11.1f} +- {100 * cv_s:4.1f}%")
+    print(f"  {'model, labels shuffled (chance)':<40} {100 * s_acc:11.1f}% "
+          f'{100 * cv_m:11.1f} +- {100 * cv_s:4.1f}%')
 
     if args.save_model:
         save_model(args.save_model, args, counts[keep], powers[keep], y, bin_len)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
