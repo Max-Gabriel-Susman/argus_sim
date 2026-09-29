@@ -3,7 +3,12 @@
 **Repo:** `argus_sim`. These scripts are how the codec's DSP was designed and
 validated before any of it became VHDL. They are standalone Python (h5py,
 numpy, scipy, scikit-learn; all installed by `rosdep` for this workspace) and
-run on files in `~/argus_data/`.
+run on files in `~/argus_data/`. The package also builds `dataset_relay_node`,
+which serves the replay `.bin` to the board over UDP :5010. Build and test it
+from `~/Documents/argus_ws` with
+`colcon build --packages-select argus_sim && colcon test --packages-select argus_sim`.
+The whole stack, and the one command that runs it on the board, is described in
+[argus_bringup/README.md](https://github.com/Max-Gabriel-Susman/argus_bringup/blob/main/README.md).
 
 | Script | Does |
 | --- | --- |
@@ -16,7 +21,7 @@ run on files in `~/argus_data/`.
 ## The result
 
 On session `indy_20161005_06` (macaque M1, 96-channel Utah array, self-paced
-reaching), the fixed-point feature pair the fabric will compute — threshold
+reaching), the fixed-point feature pair the fabric computes — threshold
 crossings at 3.5σ and spike-band power, per channel per 50 ms bin — decodes
 reach direction better than any feature set derived from the lab's own spike
 sorting. Full session, 7,451 bins, four classes, StandardScaler → LDA with
@@ -26,7 +31,7 @@ shrinkage, 5-fold CV:
 | --- | --- | --- |
 | **model: crossings + power, 3.5σ** | **53.5 ± 2.0 %** | 65,124 |
 | lab, every unit incl. hash | 49.9 ± 1.5 % | 310,777 |
-| lab, unit 1 only (what `inference_node` trains on) | 43.4 ± 1.2 % | 81,949 |
+| lab, unit 1 only (what `inference_node` trains on without a saved model) | 43.4 ± 1.2 % | 81,949 |
 | chance (majority class) | 34.4 % | — |
 
 Nineteen points over chance with a fifth of the lab's events. The absolute
@@ -64,6 +69,10 @@ ARGUS_MODEL_PATH=~/argus_model.pkl ros2 run argus_inference inference_node
 
 `inference_node` then builds `[counts..., power...]` from each `NeuralFrame`
 instead of training on the `.mat` at startup, and logs which path is active.
+On the board, `ros2 launch argus_bringup argus.launch.py program:=true
+model:=$HOME/argus_model.pkl` does the same. On 2026-09-28 the saved model
+decoded the fabric's live features, and all four intents occurred over a
+90 s run.
 
 ## The parameters, as locked
 
