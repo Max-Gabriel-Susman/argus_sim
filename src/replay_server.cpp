@@ -403,7 +403,8 @@ void ReplayServer::handle(
   if (wrapped || offset + count > n_samples) {
     stats_.wraps++;
   }
-  stats_.chunks_sent += total_chunks;
+  stats_.chunks_sent += sent_chunks;
+  stats_.chunks_dropped += dropped_chunks;
   stats_.bytes_sent += sent_bytes;
   stats_.last_offset = offset;
   stats_.last_peer = peer_str;
