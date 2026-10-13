@@ -211,3 +211,39 @@ The broadband and the `.mat` share a session clock: broadband `t0 = 1278.0`,
 behaviour 1288–1662 s. Every window here is `--start` seconds into the
 broadband, and `validate_features.py` / `decode_test.py` take `--t0` to put
 it on that clock.
+
+## Documentation
+
+Two languages, one reference. Doxygen reads the C++ under `include/` and
+`src/` and the Python under `tools/` into a single site with this README as
+its front page. On the C++ side, `ReplayServer` is the host end of the
+replay protocol the firmware's client speaks, and its page is the one to
+read: what a request is, how it is answered as a burst of chunks, what each
+counter in `dataset_relay_node`'s status line means, and `Config` field by
+field; `ReplaySource` and `DatasetRelayNode` have pages of the same shape,
+and the caller graph of `ReplayServer::handle()` is the request path. On the
+Python side each tool is a namespace page: its functions with their
+signatures, its module constants with their values (`CHANNELS`, `RHD_ZERO`,
+the cascade scale), and its module docstring shown as written, because those
+docstrings are the tools' `--help` text and read best verbatim.
+
+```bash
+sudo apt install doxygen graphviz
+doxygen
+xdg-open build/html/index.html
+```
+
+`Doxyfile` lists only what differs from the defaults, each setting with its
+reason. Output lands in `build/`, which is gitignored and is not where
+colcon builds. No ROS headers are needed: include searching is off, so the
+build is the same with or without a sourced workspace, and the `docs` job in
+CI runs it on a plain runner with warnings as errors. `argus_wire.h` and the
+replay client core belong to `argus_core` and are not read here.
+
+For the C++, a comment counts when it opens with `/**` above the thing it
+documents; its first sentence is the summary, a file needs an `@file` block,
+and a documented function must name every parameter (Doxygen warns, and CI
+fails, if one is missing). `include/argus_sim/replay_server.hpp` is written
+this way and is the pattern. For the Python, the docstring is the
+documentation as it stands: ament_pep257 already checks every one, and
+Doxygen shows it unchanged, so there is no second syntax to learn.

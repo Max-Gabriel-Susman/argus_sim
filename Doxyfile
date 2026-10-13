@@ -1,0 +1,102 @@
+# Doxyfile -- API documentation for argus_sim
+#
+#   doxygen                                   build (run from the package root)
+#   xdg-open build/html/index.html            view
+#
+# Only the settings that differ from Doxygen's defaults are listed; every
+# tag not named here keeps its default. `doxygen -g reference.cfg` writes
+# the full list with every tag explained, if you need to look one up.
+#
+# Written for Doxygen 1.9.1 (Ubuntu 22.04's package); also checked
+# against 1.9.8 (Ubuntu 24.04's, which the CI job installs).
+
+#---------------------------------------------------------------------------
+# Project
+#---------------------------------------------------------------------------
+
+PROJECT_NAME           = "Argus Sim"
+PROJECT_BRIEF          = "The host end of the replay protocol, and the feature toolchain: model, data, validation"
+
+# build/ is already in .gitignore. colcon builds this package under the
+# workspace's own build/, not here, so the two never meet.
+OUTPUT_DIRECTORY       = build
+
+#---------------------------------------------------------------------------
+# What to read
+#---------------------------------------------------------------------------
+
+# Two languages, one reference: the C++ replay server and relay node, and
+# the Python tools. README.md is the front page.
+INPUT                  = README.md \
+                         include \
+                         src \
+                         tools
+FILE_PATTERNS          = *.cpp \
+                         *.hpp \
+                         *.py
+RECURSIVE              = YES
+
+USE_MDFILE_AS_MAINPAGE = README.md
+
+# Show the include line the way a user writes it: "argus_sim/replay_server.hpp".
+STRIP_FROM_INC_PATH    = include
+
+#---------------------------------------------------------------------------
+# How to read it
+#---------------------------------------------------------------------------
+
+# The ROS headers are not on this machine's path when the docs build (CI
+# has no ROS at all). Doxygen does not need them: nothing here depends on
+# macro expansion from rclcpp, and with include searching off it neither
+# looks for them nor warns about not finding them.
+SEARCH_INCLUDES        = NO
+
+# std::string, std::vector and the like are recognised as the standard
+# library rather than listed as unknown classes.
+BUILTIN_STL_SUPPORT    = YES
+
+# The first sentence of a /** ... */ comment becomes its one-line summary,
+# so an existing /* ... */ comment turns into documentation by adding one
+# asterisk. Python docstrings are shown as written (PYTHON_DOCSTRING, on by
+# default): the tools' docstrings are their --help text, and they read
+# best verbatim.
+JAVADOC_AUTOBRIEF      = YES
+
+# Show every file, class, function and member, documented or not, so the
+# site is complete from the first run.
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+
+# The server's behaviour is in its private members: the receive loop, the
+# request handler, the socket, the counters. Same for the node.
+EXTRACT_PRIVATE        = YES
+
+#---------------------------------------------------------------------------
+# What to write
+#---------------------------------------------------------------------------
+
+GENERATE_LATEX         = NO
+
+# A navigation tree on the left and browsable, cross-referenced source.
+GENERATE_TREEVIEW      = YES
+SOURCE_BROWSER         = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+# Graphs need Graphviz (the dot program). The caller graph of
+# ReplayServer::handle() is the request path; the collaboration graph of
+# the node shows what it owns.
+HAVE_DOT               = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+DOT_IMAGE_FORMAT       = svg
+
+#---------------------------------------------------------------------------
+# Warnings
+#---------------------------------------------------------------------------
+
+# Print nothing on a clean run, so anything printed is worth reading.
+QUIET                  = YES
+
+# A documented function must document every parameter.
+WARN_NO_PARAMDOC       = YES

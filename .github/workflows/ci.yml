@@ -30,3 +30,15 @@ jobs:
               }
             }
 
+  docs:
+    name: Doxygen reference
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Doxygen and Graphviz
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq doxygen graphviz
+
+      - name: Build the reference with warnings as errors
+        run: ( cat Doxyfile; echo "WARN_AS_ERROR = FAIL_ON_WARNINGS" ) | doxygen -
