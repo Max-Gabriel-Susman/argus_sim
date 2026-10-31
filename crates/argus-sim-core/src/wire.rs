@@ -333,12 +333,13 @@ pub fn decode_chunk(datagram: &[u8]) -> Result<(argus_replay_chunk_hdr_t, &[u8])
         return Err(ChunkReject::Type);
     }
     let payload_len = usize::from(hdr.payload_len);
-    // Widened before multiplying: 65535 rows of 65535 channels overflows a
-    // u16 many times over, and must not wrap into a match.
-    let rows_len = u32::from(hdr.sample_count) * u32::from(hdr.channel_count) * 2;
+    // Widened before multiplying: 65535 rows of 65535 channels is about 2^33
+    // bytes, past even a u32, and must neither overflow nor wrap into a
+    // match.
+    let rows_len = u64::from(hdr.sample_count) * u64::from(hdr.channel_count) * 2;
     if payload_len > MAX_PAYLOAD
         || payload.len() != payload_len
-        || u32::from(hdr.payload_len) != rows_len
+        || u64::from(hdr.payload_len) != rows_len
     {
         return Err(ChunkReject::Payload);
     }
@@ -681,6 +682,15 @@ mod tests {
                 "byte {at}"
             );
         }
+        // The widest header the fields allow, 65535 rows of 65535 channels,
+        // is refused for its payload rather than overflowing the product.
+        let mut wide = good.clone();
+        for at in [16, 22] {
+            wide.get_mut(at..at + 2)
+                .ok_or("short")?
+                .copy_from_slice(&u16::MAX.to_le_bytes());
+        }
+        assert_eq!(chunk_rejected(&wide), Some(ChunkReject::Payload));
         // A bit flipped where the CRC looks: the seq, the offset, the chunk
         // numbers, the CRC itself and the payload.
         for at in [
