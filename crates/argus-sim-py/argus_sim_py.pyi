@@ -7,7 +7,10 @@ same Rust as the dataset_relay_node executable.
 """
 
 import os
-from typing import Final, final
+from types import TracebackType
+from typing import Final, TypedDict, final
+
+from typing_extensions import Self
 
 __version__: Final[str]
 """The package version, the same as the crate's and package.xml's."""
@@ -166,6 +169,96 @@ class ReplaySource:
         would not fit in memory, and OSError when the file cannot be read (it
         shrank after it was opened, say).
         """
+
+class _RelayStats(TypedDict):
+    """The counters `Relay.stats()` returns: a plain dict at run time."""
+
+    requests_served: int
+    """Requests answered, retransmits included."""
+    retransmits_served: int
+    """Of those, the ones flagged F_RETRANSMIT."""
+    chunks_sent: int
+    """Chunks handed to the socket."""
+    chunks_dropped: int
+    """Chunks withheld by `drop_mask`."""
+    bytes_sent: int
+    """Bytes handed to the socket, chunk headers included."""
+    bad_packets: int
+    """Malformed requests rejected: wrong size, magic, version, type or CRC,
+    or a `sample_count` of 0."""
+    wraps: int
+    """Requests that ran past the end of the source and went on from its
+    start."""
+    last_offset: int
+    """The `sample_offset` of the last request served, after any wrap."""
+    last_peer: str | None
+    """The dotted quad of the last requester; None before the first."""
+
+@final
+class Relay:
+    """A replay relay serving a ReplaySource over UDP, on its own thread: the
+    server the dataset_relay_node executable runs, answering requests byte for
+    byte as the C++ relay did."""
+
+    def __init__(
+        self,
+        source: ReplaySource,
+        port: int = 0,
+        bind_addr: str = "127.0.0.1",
+        loop: bool = True,
+        drop_mask: int = 0,
+    ) -> None:
+        """A relay for `source`, not yet started. `port` 0 binds a port the
+        kernel picks, so that two relays never collide; `.port` tells which.
+        `loop` wraps every request at the end of the source (a request can
+        also ask for that itself, with F_LOOP); bit N of `drop_mask` withholds
+        chunk N of every first attempt, to exercise a client's retransmits.
+
+        Raises ValueError when a row of the source does not fit one chunk, or
+        an argument is out of range.
+        """
+    def start(self) -> None:
+        """Binds the socket and starts the relay's thread; it answers requests
+        from then on. Does nothing when the relay is already running. A relay
+        that was stopped can be started again, on a new socket.
+
+        Raises ValueError for a bind address that is not a dotted quad, and
+        OSError when the socket cannot be bound (OSError with errno EADDRINUSE
+        for a port in use) or the thread cannot be started.
+        """
+    def stop(self) -> None:
+        """Stops the relay's thread and closes its socket, so the port is free
+        again when this returns. That takes up to 200 ms, the thread's receive
+        timeout, with the GIL released. Does nothing when the relay is not
+        running.
+        """
+    @property
+    def port(self) -> int | None:
+        """The UDP port the relay is bound to while it runs, None when it is
+        stopped."""
+    @property
+    def samples_per_chunk(self) -> int:
+        """The sample rows in one chunk: as many as fit MAX_PAYLOAD bytes (7
+        at 96 channels)."""
+    def stats(self) -> _RelayStats:
+        """The relay's counters since it was made, as a dict: the requests
+        served (retransmits included) and the retransmits among them, the
+        chunks sent and withheld by `drop_mask`, the bytes sent, the malformed
+        requests rejected, the requests that wrapped, the offset of the last
+        request after any wrap, and the address of the last requester, None
+        before the first. The counters go on across a stop and a start.
+        """
+    def __enter__(self) -> Self:
+        """Starts the relay; `with Relay(source) as relay:` serves inside the
+        block."""
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        """Stops the relay, however the block ended; an exception from the
+        block goes on."""
 
 def crc16(data: bytes | bytearray, crc: int = 0xFFFF) -> int:
     """The CRC-16/CCITT-FALSE of `data`, the checksum on every Argus datagram.

@@ -26,7 +26,7 @@ use crate::args::Unsigned;
 /// Only `errno` is set, not `strerror` or `filename`: with those, Python
 /// prints its own `[Errno N] ...` text instead of `text`, and `text` is the
 /// C++ relay's.
-fn os_error(py: Python<'_>, error: &io::Error, text: String) -> PyErr {
+pub(crate) fn os_error(py: Python<'_>, error: &io::Error, text: String) -> PyErr {
     // PyO3 picks the subclass from the error's kind alone, so a new error of
     // the same kind finds it; an io::Error cannot be cloned.
     let class = PyErr::from(io::Error::from(error.kind())).get_type(py);
@@ -65,6 +65,13 @@ pub struct ReplaySource {
     /// Behind an `Arc` because the core's server takes its source that way,
     /// so a relay can serve this source while Python goes on reading it.
     inner: Arc<source::ReplaySource>,
+}
+
+impl ReplaySource {
+    /// The core's source, shared with whoever else serves or reads it.
+    pub(crate) fn shared(&self) -> Arc<source::ReplaySource> {
+        Arc::clone(&self.inner)
+    }
 }
 
 #[pymethods]

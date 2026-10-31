@@ -9,6 +9,7 @@
 
 mod args;
 mod protocol;
+mod relay;
 mod source;
 
 use pyo3::pymodule;
@@ -28,6 +29,9 @@ mod argus_sim_py {
         Chunk, Request, WireError, crc16, decode_chunk, decode_request, encode_chunk,
         encode_request,
     };
+
+    #[pymodule_export]
+    use crate::relay::Relay;
 
     #[pymodule_export]
     use crate::source::ReplaySource;
