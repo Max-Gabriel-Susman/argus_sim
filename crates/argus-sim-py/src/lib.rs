@@ -7,6 +7,9 @@
 //! The bindings write no unsafe code. PyO3's macros expand to some, which is
 //! why this crate cannot `forbid(unsafe_code)` as the others do.
 
+mod args;
+mod protocol;
+
 use pyo3::pymodule;
 
 /// The Argus replay relay, for Python.
@@ -18,6 +21,12 @@ use pyo3::pymodule;
 #[pymodule]
 mod argus_sim_py {
     use argus_sim_core::wire;
+
+    #[pymodule_export]
+    use crate::protocol::{
+        Chunk, Request, WireError, crc16, decode_chunk, decode_request, encode_chunk,
+        encode_request,
+    };
 
     /// The package version, the same as the crate's and package.xml's.
     #[pymodule_export]

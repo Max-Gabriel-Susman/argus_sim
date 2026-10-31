@@ -72,4 +72,6 @@ def test_the_stub_lists_every_public_name():
     assert "__version__" in public
     assert "MAGIC" in public
     for name in public:
-        assert re.search(rf"^{name}\b", stub, re.MULTILINE), f"{name} is not in the stub"
+        # A constant, a function or a class, declared at the top level.
+        declared = rf"^(?:def |class )?{name}\b"
+        assert re.search(declared, stub, re.MULTILINE), f"{name} is not in the stub"
