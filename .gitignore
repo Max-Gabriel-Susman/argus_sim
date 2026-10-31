@@ -4,43 +4,9 @@
 /.colcon/
 /.ros/
 
-CMakeCache.txt
-CMakeFiles/
-cmake-build-*/
-CMakeScripts/
-Testing/
-CTestTestfile.cmake
-_install/
-install_manifest.txt
-compile_commands.json    
-rules.ninja
-.ninja_*
-Makefile
+/target
 
-*.o
-*.obj
-*.lo
-*.la
-*.a
-*.so*
-*.dylib
-*.dll
-*.exe
-*.out
-
-*.gcno
-*.gcda
-*.gcov
-sanitizer-*.log
-
-*.dSYM/
 core
-*.stackdump
-
-.mypy_cache/
-.clangd/
-.cache/
-.ccache/
 
 .vscode/
 .idea/
@@ -52,7 +18,5 @@ Thumbs.db
 
 __pycache__/
 *.py[cod]
-
-
-/target
+.mypy_cache/
 .pytest_cache/
