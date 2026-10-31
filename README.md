@@ -212,6 +212,82 @@ behaviour 1288–1662 s. Every window here is `--start` seconds into the
 broadband, and `validate_features.py` / `decode_test.py` take `--t0` to put
 it on that clock.
 
+## Python bindings
+
+`argus_sim_py` is the replay protocol and the relay as a Python module,
+built from the same Rust as `dataset_relay_node` (`crates/argus-sim-py`).
+It is one abi3 wheel for Python 3.10 and later. Install it with one command
+from the repository:
+
+```bash
+tools/install_bindings.sh
+```
+
+That needs maturin 1.16 on `PATH`. It builds the wheel in release, installs
+it into the user site of `/usr/bin/python3` (the interpreter the launch file
+and the tools run under), then imports it and prints its version and where
+it loaded from. Run it again after changing the bindings.
+
+What the module offers (`argus_sim_py.pyi` documents every item):
+
+| Name | Is |
+| --- | --- |
+| `MAGIC`, `VERSION`, `MSG_REQUEST`, `MSG_CHUNK`, `F_LOOP`, `F_RETRANSMIT`, `SAMPLES_PER_HALF`, `MAX_PAYLOAD`, `REQUEST_LEN`, ... | the wire constants, from `argus_wire.h` through `argus-wire` |
+| `crc16(data, crc=0xFFFF)` | the CRC-16/CCITT-FALSE every datagram carries |
+| `encode_request`, `decode_request`, `Request` | a 22-byte replay request, built or checked as the relay checks it |
+| `encode_chunk`, `decode_chunk`, `Chunk` | one chunk of a reply, built or checked |
+| `WireError` | a `ValueError` naming the check that failed in `.kind` |
+| `ReplaySource.from_file(path, channel_count=96)`, `ReplaySource.synthetic(n_samples, channel_count=96)` | a dataset, and `.read(sample_offset, count=147)`: the rows the relay would send, wrapping at the end |
+| `Relay(source, port=0, bind_addr="127.0.0.1", loop=True, drop_mask=0)` | the relay, on its own thread in this process: `start()`, `stop()`, `.port`, `.samples_per_chunk`, `stats()`, and a context manager |
+
+Errors are exceptions: `WireError` for a datagram the protocol does not
+allow, `OSError` for files and sockets (with the relay's own messages),
+`ValueError` for bad arguments. The relay releases the GIL while it starts
+and stops, and its thread never needs it.
+
+Serve the synthetic pattern on a port the kernel picks, fetch one half of
+the board's buffer the way the board does, and check it:
+
+```python
+import socket
+
+import argus_sim_py as asp
+
+source = asp.ReplaySource.synthetic(30000)
+with asp.Relay(source) as relay, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+    sock.settimeout(1.0)
+    request = asp.encode_request(seq=1, sample_offset=0, sample_count=asp.SAMPLES_PER_HALF)
+    sock.sendto(request, ("127.0.0.1", relay.port))
+    first = asp.decode_chunk(sock.recv(asp.MAX_CHUNK_LEN))
+    rest = [asp.decode_chunk(sock.recv(asp.MAX_CHUNK_LEN)) for _ in range(first.chunk_total - 1)]
+    half = b"".join(chunk.payload for chunk in [first, *rest])
+    assert half == source.read(0, asp.SAMPLES_PER_HALF)
+    print(first.chunk_total, "chunks,", relay.stats()["bytes_sent"], "bytes")
+```
+
+That prints `21 chunks, 28812 bytes`: 147 samples at 7 rows a chunk.
+
+The tests are pytest under `crates/argus-sim-py/pytests`. They check the
+module against the C++ relay's recorded replies in
+`testdata/relay_corpus.json`, byte for byte. Run them against a wheel built
+into a scratch directory, so nothing installed changes:
+
+```bash
+maturin build --release -m crates/argus-sim-py/Cargo.toml --out /tmp/wheels \
+    --compatibility linux --interpreter python3
+python3 -m zipfile -e /tmp/wheels/argus_sim_py-*.whl /tmp/argus_sim_py
+PYTHONPATH=/tmp/argus_sim_py python3 -m pytest -p no:cacheprovider crates/argus-sim-py/pytests
+```
+
+The scripts in `tools/` do not use the module, on purpose. None of them
+speaks the replay protocol; the ones that read a `.bin` (`spike_features.py`,
+`decode_test.py`, `hw_bitexact.py`) map it with `np.memmap`, which already reads
+rows on demand without loading the file, as `ReplaySource` would; and `hw_bitexact.py` runs inside hwtest's
+`bitexact` stage, which must not depend on a wheel being installed.
+`record_golden.py` builds its requests in plain Python (`struct` and a
+bitwise CRC) so that the corpus it records is independent of the code it
+checks.
+
 ## Documentation
 
 Two languages, one reference. Doxygen reads the C++ under `include/` and
