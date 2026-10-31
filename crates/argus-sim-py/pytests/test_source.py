@@ -21,8 +21,8 @@ CODE = np.dtype("<u2")
 
 def identity(n_samples, channels):
     """The identity pattern, as the C++ relay built it: the chip in bits
-    15..14, the channel within the chip in bits 12..8, the sample's low byte
-    in bits 7..0."""
+    15..14, the channel within the chip in bits 13..8 (bit 13 stays 0), the
+    sample's low byte in bits 7..0."""
     sample = np.arange(n_samples, dtype=np.uint64)[:, None]
     channel = np.arange(channels, dtype=np.uint64)[None, :]
     chip = (channel // 32) & 0x3

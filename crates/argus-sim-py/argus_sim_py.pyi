@@ -147,8 +147,9 @@ class ReplaySource:
     def synthetic(n_samples: int, channel_count: int = 96) -> ReplaySource:
         """The identity pattern the fabric's self-test expects: `n_samples`
         rows of `channel_count` samples, each the chip (`channel // 32`, two
-        bits) in bits 15..14, the channel within the chip in bits 12..8 and
-        the sample index modulo 256 in bits 7..0.
+        bits) in bits 15..14, the channel within the chip in bits 13..8 (0
+        to 31, so bit 13 stays 0) and the sample index modulo 256 in bits
+        7..0.
 
         Raises ValueError when either is 0, and MemoryError when the rows
         cannot be held in memory.

@@ -279,7 +279,8 @@ impl ReplaySource {
 
 /// The identity pattern's code for `channel` of `sample`: bits 15..14 the
 /// chip (`channel / 32`, in two bits, so channel 128 is chip 0 again),
-/// bits 12..8 the channel within the chip, bits 7..0 the sample modulo 256.
+/// bits 13..8 the channel within the chip (0 to 31, so bit 13 stays 0),
+/// bits 7..0 the sample modulo 256.
 #[must_use]
 pub fn identity(sample: u64, channel: u16) -> u16 {
     let chip = (channel / 32) & 0x3;
