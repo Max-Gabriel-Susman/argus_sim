@@ -1,0 +1,95 @@
+# argus_sim: the workstation side of the Argus replay rig.
+#
+# The repository root is both the ROS 2 package (ament_cargo, see
+# package.xml) and the Cargo workspace. The package here holds the two
+# executables colcon installs, dataset_relay_node and replay_client_test;
+# the relay itself, which needs no ROS, lives in crates/argus-sim-core so it
+# can be tested on any host.
+[package]
+name = "argus_sim"
+description = "Argus dataset relay: serves a recorded dataset to the board over UDP"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# One [[bin]] per executable, like add_executable() in CMake. The names are
+# the ones the launch file and the board's scripts run.
+[[bin]]
+name = "dataset_relay_node"
+path = "src/bin/dataset_relay_node.rs"
+
+[[bin]]
+name = "replay_client_test"
+path = "src/bin/replay_client_test.rs"
+
+# Opts this package into [workspace.lints] below.
+[lints]
+workspace = true
+
+[dependencies]
+# The relay: wire format, dataset source and the UDP server.
+argus-sim-core = { path = "crates/argus-sim-core" }
+# The client the board runs, which replay_client_test drives.
+argus-replay = { workspace = true }
+# The ROS 2 client library, and the ROS message packages as ros_env::<package>.
+rclrs = "0.8"
+ros-env = "0.3"
+# rclrs installs no signal handler; this one turns SIGINT and SIGTERM into a
+# clean stop of the executor.
+ctrlc = { version = "3.5", features = ["termination"] }
+
+# colcon-ros-cargo installs these directories under share/argus_sim, as the
+# CMake install(DIRECTORY ...) did.
+[package.metadata.ros]
+install_to_share = ["config", "launch", "worlds"]
+
+[workspace]
+resolver = "3"
+
+members = [".", "crates/argus-sim-core"]
+
+# What a bare `cargo build` or `cargo test` acts on. The Python bindings,
+# when they join the members, stay out of this list: maturin builds them.
+default-members = [".", "crates/argus-sim-core"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+publish = false
+
+# The wire contract and the board's replay client, from the firmware's
+# workspace at the release the board runs. One implementation of the
+# structs, the constants and the CRC, shared with the firmware.
+[workspace.dependencies]
+argus-wire = { git = "https://github.com/Max-Gabriel-Susman/argus_safety_controller", tag = "v2.1" }
+argus-replay = { git = "https://github.com/Max-Gabriel-Susman/argus_safety_controller", tag = "v2.1" }
+argus-difftest = { git = "https://github.com/Max-Gabriel-Susman/argus_safety_controller", tag = "v2.1" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+# Every public item carries rustdoc. The gate builds with -D warnings, so a
+# public item added without a doc comment fails it.
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+undocumented_unsafe_blocks = "deny"
+cast_possible_truncation = "warn"
+
+# The tests run many requests through the firmware's client and the C header
+# it was ported from. Unoptimized they are slow; optimized, as the firmware's
+# own workspace builds them, they take seconds (cc takes the C shim's -O
+# level from this profile too).
+[profile.dev.package.argus-difftest]
+opt-level = 2
+[profile.dev.package.argus-replay]
+opt-level = 2
+[profile.dev.package.argus-wire]
+opt-level = 2

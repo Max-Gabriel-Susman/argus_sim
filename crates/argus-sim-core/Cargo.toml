@@ -1,0 +1,34 @@
+# argus-sim-core: the replay relay without ROS.
+#
+# The wire format as the relay sees it, the dataset source and the UDP
+# server. No ROS at build or run time, so its tests run on any host; the
+# node in the argus_sim package wraps it.
+
+[package]
+name = "argus-sim-core" # code imports it as argus_sim_core
+description = "Argus replay relay: request decoding, the dataset source and the UDP server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# The packet layouts and the CRC, the same crate the firmware uses.
+argus-wire = { workspace = true }
+# Viewing a received datagram as a request and a header as bytes without
+# unsafe code. The version argus-wire derives its structs with.
+zerocopy = { version = "0.8", features = ["derive"] }
+# SO_REUSEADDR and SO_SNDBUF without unsafe code; the socket then becomes a
+# std::net::UdpSocket.
+socket2 = "0.6"
+
+[dev-dependencies]
+# The board's client, to drive the relay in the tests as the board does.
+argus-replay = { workspace = true }
+# The C replay client header compiled for the host behind a safe wrapper,
+# and the firmware's reference relay, to check against.
+argus-difftest = { workspace = true }
