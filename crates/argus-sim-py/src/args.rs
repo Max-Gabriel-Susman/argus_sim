@@ -1,4 +1,4 @@
-//! Wire fields taken from Python ints.
+//! Wire fields and other unsigned arguments taken from Python ints.
 //!
 //! PyO3 converts a Python int to a `u16` or `u32` on its own, but an int out
 //! of range (negative, or too large for the field) then raises
@@ -9,18 +9,22 @@
 use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 
-/// An unsigned integer type a wire field is made of.
+/// An unsigned integer type a wire field (or a count of samples) is made of.
 pub trait Field: Copy {
     /// The largest value the field holds, for the error message.
-    const MAX: u32;
+    const MAX: u64;
 }
 
 impl Field for u16 {
-    const MAX: u32 = u16::MAX as u32;
+    const MAX: u64 = u16::MAX as u64;
 }
 
 impl Field for u32 {
-    const MAX: u32 = u32::MAX;
+    const MAX: u64 = u32::MAX as u64;
+}
+
+impl Field for u64 {
+    const MAX: u64 = u64::MAX;
 }
 
 /// A wire field from a Python int, refused with `ValueError` when it does not

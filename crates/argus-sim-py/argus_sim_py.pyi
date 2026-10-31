@@ -6,6 +6,7 @@ whole sample rows. This module is that protocol and its relay, built from the
 same Rust as the dataset_relay_node executable.
 """
 
+import os
 from typing import Final, final
 
 __version__: Final[str]
@@ -122,6 +123,49 @@ class Chunk:
         """The rows: `sample_count` x `channel_count` little-endian u16 samples."""
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
+
+@final
+class ReplaySource:
+    """A replay dataset: `sample_count` rows of `channel_count` little-endian
+    u16 samples, read from a recorded file or generated as the identity
+    pattern, exactly as the relay serves it."""
+
+    @staticmethod
+    def from_file(path: str | os.PathLike[str], channel_count: int = 96) -> ReplaySource:
+        """Opens a replay file: little-endian u16 samples, sample-major, with
+        no header, `channel_count` samples per row. The file is read on
+        demand, not loaded.
+
+        Raises ValueError when `channel_count` is 0, and OSError when the file
+        cannot be opened (FileNotFoundError, PermissionError, ... with
+        `.errno` set) or is empty or ends partway through a row.
+        """
+    @staticmethod
+    def synthetic(n_samples: int, channel_count: int = 96) -> ReplaySource:
+        """The identity pattern the fabric's self-test expects: `n_samples`
+        rows of `channel_count` samples, each the chip (`channel // 32`, two
+        bits) in bits 15..14, the channel within the chip in bits 12..8 and
+        the sample index modulo 256 in bits 7..0.
+
+        Raises ValueError when either is 0, and MemoryError when the rows
+        cannot be held in memory.
+        """
+    @property
+    def sample_count(self) -> int:
+        """The rows in the source; never 0."""
+    @property
+    def channel_count(self) -> int:
+        """The samples in a row; never 0."""
+    def read(self, sample_offset: int, count: int = 147) -> bytes:
+        """`count` rows from row `sample_offset`, as bytes: the rows the relay
+        would send for that request. The offset is taken modulo
+        `sample_count` and the rows wrap at the end, as many times as it
+        takes, so `count` may be more than the whole source.
+
+        Raises ValueError for a negative argument, MemoryError when the rows
+        would not fit in memory, and OSError when the file cannot be read (it
+        shrank after it was opened, say).
+        """
 
 def crc16(data: bytes | bytearray, crc: int = 0xFFFF) -> int:
     """The CRC-16/CCITT-FALSE of `data`, the checksum on every Argus datagram.
