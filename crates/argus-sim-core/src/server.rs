@@ -131,7 +131,8 @@ pub enum ServerError {
     Bind {
         /// [`Config::bind_addr`].
         addr: String,
-        /// The port it was bound to, after a 0 became [`REPLAY_PORT`].
+        /// The port it tried: [`REPLAY_PORT`] for a [`Config::port`] of 0,
+        /// and 0 when the kernel was asked to pick one.
         port: u16,
         /// What `bind` reported.
         error: io::Error,
@@ -353,7 +354,8 @@ fn lock(stats: &Mutex<ReplayStats>) -> std::sync::MutexGuard<'_, ReplayStats> {
 
 /// Whether the receive loop goes on after `recv_from` failed with `error`.
 ///
-/// A timeout only means it is time to look at the stop flag again. Any other
+/// A timeout, or a signal interrupting the wait, only means it is time to
+/// look at the stop flag again. Any other
 /// error ends the thread silently while the node keeps running, as the C++
 /// did; kept for parity.
 fn recv_goes_on(error: &io::Error) -> bool {
@@ -1071,7 +1073,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_timeout_keeps_the_receive_loop_going() {
+    fn only_a_timeout_or_an_interruption_keeps_the_receive_loop_going() {
         for kind in [
             io::ErrorKind::WouldBlock,
             io::ErrorKind::TimedOut,

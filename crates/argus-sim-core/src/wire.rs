@@ -35,8 +35,9 @@ const fn narrow(value: u32) -> u16 {
     value as u16
 }
 
-/// `ARGUS_FRAME_MAGIC`, "ARGS" read as a little-endian `u32`: the first
-/// field of every Argus datagram.
+/// `ARGUS_FRAME_MAGIC`, 0x41524753 ('A' 'R' 'G' 'S' written as a number),
+/// sent little-endian, so the first four bytes of every Argus datagram read
+/// "SGRA".
 pub const MAGIC: u32 = ARGUS_FRAME_MAGIC;
 /// `ARGUS_REPLAY_VERSION`, the protocol version in requests and chunks.
 pub const VERSION: u16 = narrow(ARGUS_REPLAY_VERSION);

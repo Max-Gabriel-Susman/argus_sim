@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn the_pattern_packs_chip_channel_and_sample() {
-        // Chip boundaries at channels 31 and 32, the last channel at 96, and
+        // Chip boundaries at channels 31 and 32, the last of 96 at 95, and
         // the sample index wrapping its byte between 255 and 256.
         assert_eq!(identity(255, 31), 0x1FFF);
         assert_eq!(identity(256, 31), 0x1F00);
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn zero_channels_are_refused() -> TestResult {
-        // The file check comes before the open, as in the C++, so the path
+        // The channel check comes before the open, as in the C++, so the path
         // need not exist.
         let err = ReplaySource::from_file("no-such-file.bin", 0)
             .err()

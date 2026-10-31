@@ -44,8 +44,8 @@ mod argus_sim_py {
     )]
     const __version__: &str = env!("CARGO_PKG_VERSION");
 
-    /// The first field of every Argus datagram: "ARGS" read as a
-    /// little-endian 32-bit integer.
+    /// The first field of every Argus datagram: 0x41524753, "ARGS" written as
+    /// a number, sent little-endian so the bytes read "SGRA".
     #[pymodule_export]
     const MAGIC: u32 = wire::MAGIC;
 

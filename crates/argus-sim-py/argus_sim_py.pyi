@@ -16,8 +16,8 @@ __version__: Final[str]
 """The package version, the same as the crate's and package.xml's."""
 
 MAGIC: Final[int]
-"""The first field of every Argus datagram: "ARGS" read as a little-endian
-32-bit integer."""
+"""The first field of every Argus datagram: 0x41524753, "ARGS" written as a
+number, sent little-endian so the bytes read "SGRA"."""
 
 VERSION: Final[int]
 """The replay protocol version, in requests and chunks."""

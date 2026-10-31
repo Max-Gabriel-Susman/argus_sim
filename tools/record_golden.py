@@ -45,7 +45,7 @@ import tempfile
 import time
 
 # The wire format, from argus_wire.h.
-MAGIC = 0x41524753          # ARGUS_FRAME_MAGIC, "ARGS" little-endian
+MAGIC = 0x41524753          # ARGUS_FRAME_MAGIC, "SGRA" on the wire
 VERSION = 1                 # ARGUS_REPLAY_VERSION
 MSG_REQUEST = 0x0010        # ARGUS_MSG_REPLAY_REQUEST
 MSG_CHUNK = 0x0011          # ARGUS_MSG_REPLAY_CHUNK
@@ -120,9 +120,9 @@ def corpus():
     reqs.append(request(6, 0, 0))
 
     # Around the end of the dataset with counts of one row, two, one full
-    # chunk and one more than a chunk, under every flag combination. The
-    # first three counts end the first 20 requests, whose replies are kept
-    # whole.
+    # chunk and one more than a chunk, each edge under a flag combination of
+    # its own (n - 1 none, n LOOP, n + 1 RETRANSMIT, 2n + 5 both). The first
+    # three counts end the first 20 requests, whose replies are kept whole.
     edges = [n - 1, n, n + 1, 2 * n + 5]
     flag_sets = [0, F_LOOP, F_RETRANSMIT, F_LOOP | F_RETRANSMIT]
     seq = 100
@@ -176,8 +176,8 @@ def corpus():
 
 
 def runs(lengths):
-    """Lengths as [length, repeat] pairs: a 147-sample reply is twenty
-    full chunks and a short one, [[1372, 20], [1176, 1]]."""
+    """Lengths as [length, repeat] pairs: a 10-sample reply at 96 channels
+    is a full chunk and a short one, [[1372, 1], [604, 1]]."""
     pairs = []
     for length in lengths:
         if pairs and pairs[-1][0] == length:
