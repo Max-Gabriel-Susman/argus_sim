@@ -28,8 +28,8 @@ use rclrs::{
 };
 use ros_env::std_msgs::msg::String as StringMsg;
 
-/// The node's name, and the logger a startup error goes to: the C++ logged
-/// it on `rclcpp::get_logger("dataset_relay")`, whatever the node was
+/// The node's name, and the logger a startup error goes to: the C++ node
+/// logged it on the logger named `dataset_relay`, whatever the node was
 /// renamed to.
 const NODE_NAME: &str = "dataset_relay";
 
@@ -278,8 +278,8 @@ struct Parameters {
 ///
 /// rcl keeps one list of overrides per node name: a params file's
 /// `dataset_relay:` section is one, and every `-p` goes into `/**`, the
-/// list that applies to all nodes, wherever on the line it stands. rclcpp
-/// merges the lists that match the node in the order rcl created them. So
+/// list that applies to all nodes, wherever on the line it stands. ROS's
+/// C++ client library, which the C++ node ran on, merges the lists that match the node in the order rcl created them. So
 /// in `ros2 run argus_sim dataset_relay_node --ros-args --params-file
 /// argus.yaml -p port:=26012` the `-p` wins, and with the `-p` first the
 /// file wins. rclrs 0.8 instead always applies `/**` first and the node's
@@ -287,7 +287,7 @@ struct Parameters {
 /// would win and the relay would bind the board's port.
 ///
 /// Node arguments are applied after the global ones, so handing the `-p`s
-/// back as node arguments restores rclcpp's order. This assumes the first
+/// back as node arguments restores the C++ node's order. This assumes the first
 /// file names the node, as argus.yaml does, rather than `/**`; rcl still
 /// parses every value, this only picks out the tokens.
 fn params_overriding_files(args: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -318,7 +318,8 @@ fn params_overriding_files(args: impl IntoIterator<Item = String>) -> Vec<String
         }
     }
     if !file_first || params.is_empty() {
-        // `/**` came first, or there is no file: rclrs and rclcpp agree.
+        // `/**` came first, or there is no file: rclrs and the C++ node
+        // agree.
         return Vec::new();
     }
     params.insert(0, "--ros-args".to_owned());
@@ -516,7 +517,7 @@ mod tests {
     #[test]
     fn params_before_a_file_are_left_to_rcl() {
         // The `/**` list came first, so the file wins over every -p, even one
-        // after it, in rclcpp too.
+        // after it, in the C++ node too.
         let line = "relay --ros-args -p port:=26012 --params-file argus.yaml";
         assert!(params_overriding_files(args(line)).is_empty());
         let line = "relay --ros-args -p a:=1 --params-file f.yaml -p b:=2";

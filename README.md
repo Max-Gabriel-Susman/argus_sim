@@ -130,7 +130,7 @@ handler that stops spinning on SIGINT or SIGTERM (rclrs installs none). The
 server never runs on the executor: the board works to a millisecond budget
 per buffer swap, and an executor shared with a timer is not the place for
 that. When a params file comes before a `-p`, the node applies the `-p`
-last, as rclcpp does; rclrs alone would let the file win.
+last, as the C++ node did; rclrs alone would let the file win.
 
 **The test client** (`src/bin/replay_client_test.rs`) runs `argus-replay`,
 the board's own client, over a host UDP socket, so a pass means the relay
