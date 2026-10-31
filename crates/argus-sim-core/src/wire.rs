@@ -269,6 +269,119 @@ pub fn seal_chunk(
     Ok(len)
 }
 
+/// Why a datagram was not taken as a chunk.
+///
+/// The relay never reads chunks; this is for the tools and the bindings that
+/// look at its replies. The variants are in the order [`decode_chunk`] checks
+/// them. The board's client checks more than this (the `seq`, the channel
+/// count and the chunk's place in the fetch it is waiting for); these are only
+/// the checks a chunk can fail on its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChunkReject {
+    /// The datagram is shorter than a chunk header.
+    Size,
+    /// The first field is not [`MAGIC`].
+    Magic,
+    /// The `version` is not [`VERSION`].
+    Version,
+    /// The `type` is not [`MSG_CHUNK`].
+    Type,
+    /// The payload does not agree with the header: `payload_len` is over
+    /// [`MAX_PAYLOAD`], is not the length of the bytes after the header, or
+    /// is not `sample_count` rows of `channel_count` samples.
+    Payload,
+    /// The CRC does not match the header and the payload.
+    Crc,
+}
+
+impl fmt::Display for ChunkReject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Size => "shorter than a replay chunk header",
+            Self::Magic => "bad magic",
+            Self::Version => "unsupported replay version",
+            Self::Type => "not a replay chunk",
+            Self::Payload => "payload does not match the header",
+            Self::Crc => "CRC mismatch",
+        })
+    }
+}
+
+impl std::error::Error for ChunkReject {}
+
+/// Checks a received datagram and returns the chunk header and payload in it.
+///
+/// The length, then magic, version and type, then the payload against
+/// `payload_len`, `sample_count` and `channel_count`, then the CRC over
+/// header bytes [0, [`CHUNK_CRC_SPAN`]) followed by the payload. The payload
+/// is checked before the CRC because its length says what the CRC covers.
+///
+/// # Errors
+///
+/// The first check that fails, as a [`ChunkReject`].
+pub fn decode_chunk(datagram: &[u8]) -> Result<(argus_replay_chunk_hdr_t, &[u8]), ChunkReject> {
+    let (hdr, payload) =
+        argus_replay_chunk_hdr_t::read_from_prefix(datagram).map_err(|_| ChunkReject::Size)?;
+
+    if hdr.magic != MAGIC {
+        return Err(ChunkReject::Magic);
+    }
+    if hdr.version != VERSION {
+        return Err(ChunkReject::Version);
+    }
+    if hdr.type_ != MSG_CHUNK {
+        return Err(ChunkReject::Type);
+    }
+    let payload_len = usize::from(hdr.payload_len);
+    // Widened before multiplying: 65535 rows of 65535 channels overflows a
+    // u16 many times over, and must not wrap into a match.
+    let rows_len = u32::from(hdr.sample_count) * u32::from(hdr.channel_count) * 2;
+    if payload_len > MAX_PAYLOAD
+        || payload.len() != payload_len
+        || u32::from(hdr.payload_len) != rows_len
+    {
+        return Err(ChunkReject::Payload);
+    }
+    let covered = datagram.get(..CHUNK_CRC_SPAN).ok_or(ChunkReject::Size)?;
+    if Crc16::new().update(covered).update(payload).finish() != hdr.crc {
+        return Err(ChunkReject::Crc);
+    }
+    Ok((hdr, payload))
+}
+
+/// The CRC-16/CCITT-FALSE of `data`, starting from the register value
+/// `register` instead of the usual 0xFFFF.
+///
+/// This is how a checksum over pieces is carried from one call to the next
+/// by a caller that only has the number, not a [`Crc16`]: the CRC of `a`
+/// then `b` is `crc16_from(crc16_from(0xFFFF, a), b)`.
+///
+/// argus-wire's [`Crc16`] starts at 0xFFFF and has no way to be set to
+/// another value, on purpose, and the CRC is not written a second time
+/// here. Instead, this finds the two bytes that take a fresh register to
+/// `register`, and feeds `data` after them. Two bytes always do it, and
+/// exactly one pair does: fed to the register, they are XORed into all 16
+/// bits of it before 16 shift steps, and each step can be undone (a set low
+/// bit after the step means the polynomial was XORed in), so the pairs map
+/// one to one onto the 65536 register values. The search costs at most 65536
+/// two-byte updates, a fraction of a millisecond, and is skipped when the
+/// register is the usual start.
+#[must_use]
+pub fn crc16_from(register: u16, data: &[u8]) -> u16 {
+    let start = Crc16::new();
+    let resumed = if start.finish() == register {
+        start
+    } else {
+        (0..=u16::MAX)
+            .map(|prefix| start.update(&prefix.to_be_bytes()))
+            .find(|crc| crc.finish() == register)
+            // Never taken: every register value has its pair, as above, and a
+            // test walks all of them.
+            .unwrap_or(start)
+    };
+    resumed.update(data).finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,6 +597,162 @@ mod tests {
             seal_chunk(short, &fields, 0),
             Err(ChunkError::BufferTooShort)
         );
+    }
+
+    /// A sealed chunk of `sample_count` rows of `channel_count` samples, its
+    /// payload bytes counting up from 0.
+    fn sealed(
+        sample_count: u16,
+        channel_count: u16,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let fields = ChunkFields {
+            seq: 0x1122_3344,
+            sample_offset: 29_999,
+            sample_count,
+            chunk_index: 4,
+            chunk_total: 21,
+            channel_count,
+        };
+        let payload_len = usize::from(sample_count) * usize::from(channel_count) * 2;
+        let mut packet = vec![0u8; CHUNK_HEADER_LEN + payload_len];
+        let (_, payload) = packet.split_at_mut(CHUNK_HEADER_LEN);
+        for (i, byte) in payload.iter_mut().enumerate() {
+            *byte = u8::try_from(i % 251)?;
+        }
+        let len = seal_chunk(&mut packet, &fields, payload_len)?;
+        assert_eq!(len, packet.len());
+        Ok(packet)
+    }
+
+    /// Why `decode_chunk` refused a datagram, if it did.
+    fn chunk_rejected(datagram: &[u8]) -> Option<ChunkReject> {
+        decode_chunk(datagram).err()
+    }
+
+    #[test]
+    fn a_sealed_chunk_decodes_to_its_fields() -> TestResult {
+        let packet = sealed(3, 96)?;
+        let (hdr, payload) = decode_chunk(&packet)?;
+        assert_eq!({ hdr.seq }, 0x1122_3344);
+        assert_eq!({ hdr.sample_offset }, 29_999);
+        assert_eq!({ hdr.sample_count }, 3);
+        assert_eq!({ hdr.chunk_index }, 4);
+        assert_eq!({ hdr.chunk_total }, 21);
+        assert_eq!({ hdr.channel_count }, 96);
+        assert_eq!(usize::from(hdr.payload_len), 3 * 96 * 2);
+        assert_eq!(Some(payload), packet.get(CHUNK_HEADER_LEN..));
+        // A full chunk and an empty one decode too.
+        decode_chunk(&sealed(7, 96)?)?;
+        decode_chunk(&sealed(0, 96)?)?;
+        Ok(())
+    }
+
+    #[test]
+    fn a_chunk_is_refused_in_order() -> TestResult {
+        let good = sealed(3, 96)?;
+        assert_eq!(
+            chunk_rejected(good.get(..CHUNK_HEADER_LEN - 1).ok_or("short")?),
+            Some(ChunkReject::Size)
+        );
+        assert_eq!(chunk_rejected(&[]), Some(ChunkReject::Size));
+        for (offset, reject) in [
+            (0, ChunkReject::Magic),
+            (4, ChunkReject::Version),
+            (6, ChunkReject::Type),
+        ] {
+            let mut bad = good.clone();
+            flip(&mut bad, offset, 0x01)?;
+            assert_eq!(chunk_rejected(&bad), Some(reject), "byte {offset}");
+        }
+        // A byte missing from the payload, a byte too many, and a header
+        // whose rows (sample_count at 16, channel_count at 22) no longer
+        // match payload_len.
+        let short = good.get(..good.len() - 1).ok_or("short")?;
+        assert_eq!(chunk_rejected(short), Some(ChunkReject::Payload));
+        let mut long = good.clone();
+        long.push(0);
+        assert_eq!(chunk_rejected(&long), Some(ChunkReject::Payload));
+        for at in [16, 22] {
+            let mut bad = good.clone();
+            flip(&mut bad, at, 0x01)?;
+            assert_eq!(
+                chunk_rejected(&bad),
+                Some(ChunkReject::Payload),
+                "byte {at}"
+            );
+        }
+        // A bit flipped where the CRC looks: the seq, the offset, the chunk
+        // numbers, the CRC itself and the payload.
+        for at in [
+            8,
+            12,
+            18,
+            20,
+            CHUNK_CRC_SPAN,
+            CHUNK_HEADER_LEN,
+            good.len() - 1,
+        ] {
+            let mut bad = good.clone();
+            flip(&mut bad, at, 0x80)?;
+            assert_eq!(chunk_rejected(&bad), Some(ChunkReject::Crc), "byte {at}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn a_chunk_over_the_mtu_is_refused() -> TestResult {
+        // 8 rows of 96 channels: one row more than fits. seal_chunk will not
+        // build it, so the header is written by hand; every other check
+        // would pass.
+        let payload_len: u16 = 8 * 96 * 2;
+        let mut hdr = argus_replay_chunk_hdr_t {
+            magic: MAGIC,
+            version: VERSION,
+            type_: MSG_CHUNK,
+            seq: 1,
+            sample_offset: 0,
+            sample_count: 8,
+            chunk_index: 0,
+            chunk_total: 1,
+            channel_count: 96,
+            payload_len,
+            crc: 0,
+        };
+        let payload = vec![0u8; usize::from(payload_len)];
+        let covered = hdr.as_bytes().get(..CHUNK_CRC_SPAN).ok_or("short")?;
+        hdr.crc = Crc16::new().update(covered).update(&payload).finish();
+        let mut packet = hdr.as_bytes().to_vec();
+        packet.extend_from_slice(&payload);
+        assert_eq!(chunk_rejected(&packet), Some(ChunkReject::Payload));
+        Ok(())
+    }
+
+    #[test]
+    fn the_crc_resumes_from_any_register() {
+        let data = b"123456789";
+        for split in 0..=data.len() {
+            let (head, tail) = data.split_at(split);
+            let resumed = crc16_from(crc16_from(0xFFFF, head), tail);
+            assert_eq!(resumed, 0x29B1, "split at {split}");
+        }
+        assert_eq!(crc16_from(0xFFFF, data), argus_wire::crc::checksum(data));
+        for register in [0x0000, 0x0001, 0x29B1, 0x8000, 0xFFFE] {
+            assert_eq!(crc16_from(register, &[]), register);
+        }
+    }
+
+    #[test]
+    fn two_bytes_take_a_fresh_register_to_every_value() {
+        // What crc16_from's search relies on: the 65536 two-byte prefixes
+        // leave 65536 different registers.
+        let mut reached = vec![false; 65536];
+        for prefix in 0..=u16::MAX {
+            let register = Crc16::new().update(&prefix.to_be_bytes()).finish();
+            if let Some(seen) = reached.get_mut(usize::from(register)) {
+                *seen = true;
+            }
+        }
+        assert!(reached.iter().all(|&seen| seen));
     }
 
     /// The burst argus-difftest's relay sends for `request`, built here: the
