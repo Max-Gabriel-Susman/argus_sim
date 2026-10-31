@@ -22,9 +22,9 @@ use argus_sim_core::server::{Config, ReplayServer, ReplayStats, ServerError};
 use argus_sim_core::source::{ReplaySource, SourceError};
 use argus_sim_core::wire::{MAX_CHANNELS, REPLAY_PORT};
 use rclrs::{
-    Context, CreateBasicExecutor, DeclarationError, Executor, IntoPrimitiveOptions, Logger,
-    MandatoryParameter, Node, Publisher, RclrsError, SpinOptions, Timer, log_fatal, log_info,
-    log_warn,
+    Context, CreateBasicExecutor, DeclarationError, Executor, IntoNodeOptions,
+    IntoPrimitiveOptions, Logger, MandatoryParameter, Node, Publisher, RclrsError, SpinOptions,
+    Timer, log_fatal, log_info, log_warn,
 };
 use ros_env::std_msgs::msg::String as StringMsg;
 
@@ -97,7 +97,8 @@ impl DatasetRelay {
     /// Declares the parameters, builds the source, starts the server and the
     /// status timer, logging what it serves, in the C++ node's order.
     fn new(executor: &Executor) -> Result<Self, StartupError> {
-        let node = executor.create_node(NODE_NAME)?;
+        let cli_params = params_overriding_files(std::env::args());
+        let node = executor.create_node(NODE_NAME.arguments(cli_params))?;
         let declared = DeclaredParameters::declare(&node)?;
         let params = declared.values();
         let logger = node.logger();
@@ -271,6 +272,59 @@ struct Parameters {
     synthetic_samples: i64,
 }
 
+/// The command line's `-p` / `--param` overrides as node arguments
+/// (`--ros-args -p a:=1 ...`) when a `--params-file` comes before the first
+/// of them, or none.
+///
+/// rcl keeps one list of overrides per node name: a params file's
+/// `dataset_relay:` section is one, and every `-p` goes into `/**`, the
+/// list that applies to all nodes, wherever on the line it stands. rclcpp
+/// merges the lists that match the node in the order rcl created them. So
+/// in `ros2 run argus_sim dataset_relay_node --ros-args --params-file
+/// argus.yaml -p port:=26012` the `-p` wins, and with the `-p` first the
+/// file wins. rclrs 0.8 instead always applies `/**` first and the node's
+/// own section after it, so in the first case the file's `port: 5010`
+/// would win and the relay would bind the board's port.
+///
+/// Node arguments are applied after the global ones, so handing the `-p`s
+/// back as node arguments restores rclcpp's order. This assumes the first
+/// file names the node, as argus.yaml does, rather than `/**`; rcl still
+/// parses every value, this only picks out the tokens.
+fn params_overriding_files(args: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut params = Vec::new();
+    let mut file_first = false;
+    let mut in_ros_args = false;
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--ros-args" => in_ros_args = true,
+            "--" if in_ros_args => in_ros_args = false,
+            _ if !in_ros_args => {}
+            "-p" | "--param" => {
+                if let Some(param) = args.next() {
+                    params.extend(["-p".to_owned(), param]);
+                }
+            }
+            "--params-file" => {
+                args.next();
+                file_first |= params.is_empty();
+            }
+            // The other rcl flags that take a value: skip it, so a value is
+            // never read as a flag.
+            "-r" | "--remap" | "-e" | "--enclave" | "--log-level" | "--log-config-file" => {
+                args.next();
+            }
+            _ => {}
+        }
+    }
+    if !file_first || params.is_empty() {
+        // `/**` came first, or there is no file: rclrs and rclcpp agree.
+        return Vec::new();
+    }
+    params.insert(0, "--ros-args".to_owned());
+    params
+}
+
 /// The status timer's period: `status_period_s` seconds, at least 0.1.
 /// A NaN takes the minimum, as `std::max(0.1, NaN)` did in the C++; a period
 /// too long for rcl takes the longest it can.
@@ -429,6 +483,53 @@ mod tests {
         assert_eq!(low_i32(70000), 70000);
         assert_eq!(low_i32(1 << 32), 0);
         assert_eq!(low_i32(-5), -5);
+    }
+
+    fn args(line: &str) -> Vec<String> {
+        line.split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn params_after_a_file_are_handed_back() {
+        let line = "relay --ros-args --params-file argus.yaml -p port:=26012 \
+                    --param bind_addr:=127.0.0.1";
+        assert_eq!(
+            params_overriding_files(args(line)),
+            args("--ros-args -p port:=26012 -p bind_addr:=127.0.0.1")
+        );
+        // All of them, a later file notwithstanding: rcl keeps every -p in
+        // the one `/**` list, created after the first file's section.
+        let line = "relay --ros-args --params-file f.yaml -p a:=1 --params-file g.yaml -p b:=2";
+        assert_eq!(
+            params_overriding_files(args(line)),
+            args("--ros-args -p a:=1 -p b:=2")
+        );
+        // Across --ros-args sections, with other flags in between.
+        let line = "relay --ros-args --params-file a.yaml -r __node:=relay_rs -- \
+                    other -p x --ros-args --log-level info -p port:=26012";
+        assert_eq!(
+            params_overriding_files(args(line)),
+            args("--ros-args -p port:=26012")
+        );
+    }
+
+    #[test]
+    fn params_before_a_file_are_left_to_rcl() {
+        // The `/**` list came first, so the file wins over every -p, even one
+        // after it, in rclcpp too.
+        let line = "relay --ros-args -p port:=26012 --params-file argus.yaml";
+        assert!(params_overriding_files(args(line)).is_empty());
+        let line = "relay --ros-args -p a:=1 --params-file f.yaml -p b:=2";
+        assert!(params_overriding_files(args(line)).is_empty());
+        // Without a file there is nothing to reorder.
+        assert!(params_overriding_files(args("relay --ros-args -p port:=26012")).is_empty());
+        // A file and no -p: nothing to hand back.
+        assert!(params_overriding_files(args("relay --ros-args --params-file f")).is_empty());
+        // Outside --ros-args, -p is the program's own argument.
+        assert!(params_overriding_files(args("relay --params-file f -p port:=1")).is_empty());
+        // A remap's value is not a flag.
+        let line = "relay --ros-args --params-file f.yaml -r -p:=x";
+        assert!(params_overriding_files(args(line)).is_empty());
     }
 
     #[test]
