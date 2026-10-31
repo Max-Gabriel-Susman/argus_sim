@@ -1,4 +1,4 @@
-# argus_sim/tools — feature extraction: model, data, and validation
+# argus_sim/tools: feature extraction: model, data, and validation
 
 **Repo:** `argus_sim`. These scripts are how the codec's DSP was designed and
 validated before any of it became VHDL. They are standalone Python (h5py,
@@ -21,8 +21,8 @@ The whole stack, and the one command that runs it on the board, is described in
 ## The result
 
 On session `indy_20161005_06` (macaque M1, 96-channel Utah array, self-paced
-reaching), the fixed-point feature pair the fabric computes — threshold
-crossings at 3.5σ and spike-band power, per channel per 50 ms bin — decodes
+reaching), the fixed-point feature pair the fabric computes (threshold
+crossings at 3.5σ and spike-band power, per channel per 50 ms bin) decodes
 reach direction better than any feature set derived from the lab's own spike
 sorting. Full session, 7,451 bins, four classes, StandardScaler → LDA with
 shrinkage, 5-fold CV:
@@ -32,11 +32,11 @@ shrinkage, 5-fold CV:
 | **model: crossings + power, 3.5σ** | **53.5 ± 2.0 %** | 65,124 |
 | lab, every unit incl. hash | 49.9 ± 1.5 % | 310,777 |
 | lab, unit 1 only (what `inference_node` trains on without a saved model) | 43.4 ± 1.2 % | 81,949 |
-| chance (majority class) | 34.4 % | — |
+| chance (majority class) | 34.4 % | - |
 
 Nineteen points over chance with a fifth of the lab's events. The absolute
-numbers are low for everyone because the label — instantaneous cursor-to-target
-quadrant on a self-paced task, no history — is noisy; the comparison is what
+numbers are low for everyone because the label (instantaneous cursor-to-target
+quadrant on a self-paced task, no history) is noisy; the comparison is what
 matters, and the fabric's features win it.
 
 Reproduce:
@@ -139,7 +139,7 @@ Every derived file and the command that makes it is listed in the
 [argus_data](https://github.com/Max-Gabriel-Susman/argus_data) repository
 (`scripts/derive.sh`).
 
-## How the parameters were chosen — and the wrong turn
+## How the parameters were chosen, and the wrong turn
 
 The first validation compared the model's per-channel crossing rates against
 the lab's spike sorter (`validate_features.py`). The model found 18% of the
@@ -158,13 +158,13 @@ inverted:
 
 | Threshold | Counts only | Counts + power |
 | --- | --- | --- |
-| 4.5σ | 41.6 % | — |
+| 4.5σ | 41.6 % | - |
 | 3.5σ | 43.6 % | **52.7 %** |
-| 3.0σ | 46.5 % | — |
+| 3.0σ | 46.5 % | - |
 
 (200 s window; lab unit-1 44.4 %, lab all 50.1 %.) Accuracy rises with
-event count — the crossings that failed the sorter test are decodable
-multi-unit activity — and spike-band power adds nine points on top, catching
+event count (the crossings that failed the sorter test are decodable
+multi-unit activity), and spike-band power adds nine points on top, catching
 sub-threshold activity the way the lab's hash does without the lab's low
 threshold. The same lever that failed one metric passed the other. The
 metric was the bug.
@@ -197,8 +197,8 @@ keeps the scale right, so `--save-model` fits on it too.
 `nwb_to_replay.py` processes in chunks under `--no-resample`, with the
 filter state carried across chunk boundaries (verified bit-identical to a
 single pass), so a full session costs the memory of a ten-second segment.
-Resampling to the fabric rate loads the segment whole — `resample_poly`
-carries no state — and says how much memory that is first. For the model
+Resampling to the fabric rate loads the segment whole (`resample_poly`
+carries no state) and says how much memory that is first. For the model
 and the decode test the native 24,414 Hz is fine, with `--fs 24414.0625`
 and 1221-sample bins; the fabric-rate `.bin` is for the relay and the GHDL
 testbench.
