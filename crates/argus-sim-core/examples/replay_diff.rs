@@ -82,8 +82,8 @@ type Param = (&'static str, String);
 
 /// What the command line gives.
 struct Options {
-    cpp: PathBuf,
-    rust: PathBuf,
+    cpp_node: PathBuf,
+    rust_node: PathBuf,
     dataset: PathBuf,
     cpp_port: u16,
     rust_port: u16,
@@ -114,8 +114,8 @@ impl Options {
         let usage = "usage: replay_diff --cpp NODE --rust NODE --dataset FILE \
                      [--cpp-port P] [--rust-port P] [--quiet-ms MS]";
         Ok(Self {
-            cpp: cpp.ok_or(usage)?,
-            rust: rust.ok_or(usage)?,
+            cpp_node: cpp.ok_or(usage)?,
+            rust_node: rust.ok_or(usage)?,
             dataset: dataset.ok_or(usage)?,
             cpp_port,
             rust_port,
@@ -401,8 +401,8 @@ struct Round {
 /// Starts both nodes with `params`, sends every request to both, compares
 /// the replies, then the status lines, and stops them.
 fn round(opts: &Options, name: &str, params: &[Param], reqs: &[Vec<u8>]) -> Result<Round> {
-    let mut cpp = Node::start("relay_cpp", &opts.cpp, opts.cpp_port, params)?;
-    let mut rust = Node::start("relay_rs", &opts.rust, opts.rust_port, params)?;
+    let mut cpp = Node::start("relay_cpp", &opts.cpp_node, opts.cpp_port, params)?;
+    let mut rust = Node::start("relay_rs", &opts.rust_node, opts.rust_port, params)?;
     let to_cpp = UdpSocket::bind("127.0.0.1:0")?;
     let to_rust = UdpSocket::bind("127.0.0.1:0")?;
 

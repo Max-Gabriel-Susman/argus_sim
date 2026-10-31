@@ -76,8 +76,8 @@ const MAX_LATENCY: Duration = Duration::from_millis(4);
 
 /// What the command line gives.
 struct Options {
-    cpp: PathBuf,
-    rust: PathBuf,
+    cpp_node: PathBuf,
+    rust_node: PathBuf,
     dataset: PathBuf,
     cpp_port: u16,
     rust_port: u16,
@@ -108,8 +108,8 @@ impl Options {
         let usage = "usage: replay_load --cpp NODE --rust NODE --dataset FILE \
                      [--cpp-port P] [--rust-port P] [--seconds S]";
         Ok(Self {
-            cpp: cpp.ok_or(usage)?,
-            rust: rust.ok_or(usage)?,
+            cpp_node: cpp.ok_or(usage)?,
+            rust_node: rust.ok_or(usage)?,
             dataset: dataset.ok_or(usage)?,
             cpp_port,
             rust_port,
@@ -504,7 +504,7 @@ fn run_all() -> Result<bool> {
 
     let mut cpp_runs = Vec::new();
     {
-        let mut cpp = Node::start("relay_cpp", &opts.cpp, opts.cpp_port, dataset)?;
+        let mut cpp = Node::start("relay_cpp", &opts.cpp_node, opts.cpp_port, dataset)?;
         for rate in RATES {
             let r = run(cpp.addr(), n, rate, opts.seconds, None)?;
             print_run("C++", rate, &r);
@@ -513,7 +513,7 @@ fn run_all() -> Result<bool> {
         cpp.stop()?;
     }
 
-    let mut rust = Node::start("relay_rs", &opts.rust, opts.rust_port, dataset)?;
+    let mut rust = Node::start("relay_rs", &opts.rust_node, opts.rust_port, dataset)?;
     let mut clean = true;
     for (rate, cpp_run) in RATES.into_iter().zip(&cpp_runs) {
         let r = run(rust.addr(), n, rate, opts.seconds, None)?;
