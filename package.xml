@@ -2,20 +2,18 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>argus_sim</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="gabe.susman@gmail.com">argus</maintainer>
-  <license>TODO: License declaration</license>
-
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <version>2.0.0</version>
+  <description>Workstation side of the Argus replay rig: dataset_relay_node serves a recorded neural dataset to the board over UDP, one half-buffer at a time, and replay_client_test checks a running relay with the board's replay client. Also the Python tools that designed and validate the fabric's feature extraction.</description>
+  <maintainer email="gabe.susman@gmail.com">Max-Gabriel Susman</maintainer>
+  <license>Apache-2.0</license>
 
   <depend>std_msgs</depend>
-  <depend>rclcpp</depend>
+  <!-- The replay protocol's definition for every ROS package. The Rust code
+       takes the same definitions from argus-wire. -->
   <depend>argus_core</depend>
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_common</test_depend>
+  <exec_depend>ros2launch</exec_depend>
 
   <export>
-    <build_type>ament_cmake</build_type>
+    <build_type>ament_cargo</build_type>
   </export>
 </package>
