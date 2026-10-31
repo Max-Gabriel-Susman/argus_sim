@@ -48,10 +48,11 @@ install_to_share = ["config", "launch", "worlds"]
 [workspace]
 resolver = "3"
 
-members = [".", "crates/argus-sim-core"]
+members = [".", "crates/argus-sim-core", "crates/argus-sim-py"]
 
-# What a bare `cargo build` or `cargo test` acts on. The Python bindings,
-# when they join the members, stay out of this list: maturin builds them.
+# What a bare `cargo build` or `cargo test` acts on. The Python bindings
+# stay out of this list: maturin builds them. `cargo clippy --workspace`
+# still lints them.
 default-members = [".", "crates/argus-sim-core"]
 
 [workspace.package]

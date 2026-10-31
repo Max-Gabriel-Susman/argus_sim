@@ -1,0 +1,25 @@
+# The Python package around the extension module, built by maturin.
+# tools/install_bindings.sh is the one command that builds and installs it.
+
+[build-system]
+requires = ["maturin>=1.16,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "argus-sim-py"
+description = "Python bindings for the Argus replay relay"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+# The version is Cargo's (version.workspace in Cargo.toml), so the wheel, the
+# crate and package.xml carry the same one.
+dynamic = ["version"]
+
+[tool.maturin]
+# The importable name, as [lib] name in Cargo.toml. maturin also ships the
+# stub of the same name next to this file (argus_sim_py.pyi) in the wheel,
+# with a py.typed marker, so editors and type checkers see the API.
+module-name = "argus_sim_py"

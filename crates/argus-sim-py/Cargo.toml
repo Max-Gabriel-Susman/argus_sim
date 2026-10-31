@@ -1,0 +1,38 @@
+# argus-sim-py: the relay's wire format and server, for Python.
+#
+# A Python extension module, argus_sim_py, over argus-sim-core. maturin
+# builds it (see pyproject.toml and tools/install_bindings.sh); a plain
+# `cargo build` of the workspace leaves it out, since it is not one of the
+# workspace's default members.
+
+[package]
+name = "argus-sim-py"
+description = "Python bindings for the Argus replay relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+# The name Python imports: the shared library is argus_sim_py.abi3.so, and
+# its init function is PyInit_argus_sim_py.
+name = "argus_sim_py"
+# A shared library Python can load, and nothing else: no Rust crate links
+# against the bindings.
+crate-type = ["cdylib"]
+# A test binary for an extension module would need libpython to link, and
+# the bindings are tested from Python instead (pytests/).
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The relay itself; the bindings add no wire or server logic of their own.
+argus-sim-core = { path = "../argus-sim-core" }
+# abi3-py310: one wheel for Python 3.10 (Humble's) and every later version,
+# built against the stable ABI. No extension-module feature: since 0.26 maturin
+# tells PyO3 it is building an extension module (PYO3_BUILD_EXTENSION_MODULE).
+pyo3 = { version = "0.30", features = ["abi3-py310"] }
