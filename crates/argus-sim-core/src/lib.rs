@@ -9,14 +9,16 @@
 //!   top of the structs and the CRC from `argus-wire`;
 //! - [`source`]: the dataset, a file of rows of little-endian `u16` samples
 //!   or a synthetic identity pattern;
-//! - [`server`]: the UDP server that answers requests from a source.
+//! - [`server`]: the UDP server that answers requests from a source;
+//! - [`os_error`]: OS errors in the C++ relay's words, for the executables'
+//!   messages too.
 //!
 //! The `dataset_relay_node` executable wraps it in a ROS 2 node. Nothing
 //! here needs ROS, so the tests run on any host.
 
 #![forbid(unsafe_code)]
 
-mod os_error;
+pub mod os_error;
 pub mod server;
 pub mod source;
 pub mod wire;

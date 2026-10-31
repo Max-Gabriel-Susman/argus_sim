@@ -8,7 +8,7 @@ use std::io;
 
 /// The `strerror` text of `err`, without the ` (os error N)` Rust adds.
 /// An error that did not come from the OS keeps its own text.
-pub(crate) fn strerror(err: &io::Error) -> String {
+pub fn strerror(err: &io::Error) -> String {
     let text = err.to_string();
     let Some(code) = err.raw_os_error() else {
         return text;
