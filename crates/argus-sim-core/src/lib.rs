@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+mod os_error;
 pub mod server;
 pub mod source;
 pub mod wire;
