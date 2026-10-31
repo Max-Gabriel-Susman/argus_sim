@@ -1,44 +1,250 @@
-name: argus_sim package CI
+# Builds and tests argus_sim on ROS 2 Humble the way the workstation builds
+# it (colcon + colcon-ros-cargo against the Humble apt packages), runs the
+# relay node long enough to publish its status, builds the Python bindings'
+# wheel and tests it, and builds the documentation.
+#
+# The toolchain is the one rust-toolchain.toml names, installed explicitly,
+# so cargo and colcon use the same compiler wherever they run from.
+name: argus_sim CI
 
 on:
   push:
-    branches: [ main ]
+    branches: ['**']
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  # Weekly run: argus-wire and argus-replay come from a git tag, argus_core
+  # from its main branch and the Rust message bindings from the Humble apt
+  # packages, so any of them can change while this repo doesn't.
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the run still in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  ros:
+    name: ROS build, lint and test
     runs-on: ubuntu-latest
-
+    timeout-minutes: 60
     container:
-      image: rostooling/setup-ros-docker:ubuntu-jammy-latest
+      # Official image: Ubuntu 22.04 with ros-humble-ros-base, colcon, rosdep
+      # and vcstool.
+      image: ros:humble-ros-base-jammy
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build and test argus_sim
-        uses: ros-tooling/action-ros-ci@v0.4
+        uses: actions/checkout@v7
         with:
-          package-name: argus_sim
-          target-ros2-distro: humble
-          vcs-repo-file-url: ${{ github.workspace }}/argus_sim.repos
-          colcon-defaults: |
-            {
-              "build": {
-                "symlink-install": true
-              }
-            }
+          # colcon finds packages under src/ in the workspace.
+          path: src/argus_sim
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          components: clippy, rustfmt
+
+      # First because it is fast and needs no ROS.
+      - name: Check formatting
+        working-directory: src/argus_sim
+        run: cargo fmt --all -- --check
+
+      - name: Update ROS packages and install build tools
+        run: |
+          apt-get update
+          # Get the latest Humble sync, which has the Rust message bindings.
+          apt-get dist-upgrade -y
+          apt-get install -y --no-install-recommends python3-pip
+          pip3 install colcon-ros-cargo
+
+      - name: Check Humble's Rust message bindings
+        run: |
+          if ! grep -q 'include = true' /opt/ros/humble/share/std_msgs/rust/Cargo.toml; then
+            echo "::error::/opt/ros/humble has no Rust message bindings, so ros-env cannot find std_msgs"
+            exit 1
+          fi
+
+      # argus_core defines the replay protocol for the ROS packages; the
+      # package depends on it, so it is built first, from the branch
+      # argus_sim.repos names.
+      - name: Import argus_core
+        run: vcs import src < src/argus_sim/argus_sim.repos
+
+      - name: Install ROS dependencies from package.xml
+        run: |
+          source /opt/ros/humble/setup.bash
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y
+
+      - name: Build argus_core
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --packages-select argus_core --event-handlers console_direct+
+
+      - name: Clippy (warnings are errors)
+        working-directory: src/argus_sim
+        run: |
+          source "$GITHUB_WORKSPACE/install/setup.bash"
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      # The relay's loopback tests, the golden corpus and the client tests:
+      # no ROS at run time, everything on 127.0.0.1.
+      - name: Cargo test
+        working-directory: src/argus_sim
+        run: |
+          source "$GITHUB_WORKSPACE/install/setup.bash"
+          cargo test --locked
+
+      - name: Colcon build
+        run: |
+          source install/setup.bash
+          colcon build --packages-select argus_sim --event-handlers console_direct+
+
+      # colcon test runs cargo test and cargo fmt --check for ament_cargo packages.
+      - name: Colcon test
+        run: |
+          source install/setup.bash
+          colcon test --packages-select argus_sim --event-handlers console_direct+
+          colcon test-result --verbose
+
+      # Runs the relay for 8 s on its synthetic source and passes if it
+      # published one status message and exited 0 on SIGINT. Update the
+      # match if the status text changes.
+      - name: Smoke test (the relay publishes its status)
+        run: |
+          source install/setup.bash
+          timeout --preserve-status -s INT -k 5 8 \
+            install/argus_sim/lib/argus_sim/dataset_relay_node --ros-args -p port:=26099 \
+            > relay.log 2>&1 &
+          pid=$!
+          sleep 3
+          msg=$(timeout 6 ros2 topic echo --once /dataset_relay/status std_msgs/msg/String 2>&1) || true
+          rc=0
+          wait "$pid" || rc=$?
+          cat relay.log
+          echo "--- one status message:"
+          echo "$msg"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::the relay exited with $rc after SIGINT, not 0"
+            exit 1
+          fi
+          if [[ "$msg" != *"requests=0 retransmits=0 chunks=0"* ]]; then
+            echo "::error::no status message on /dataset_relay/status"
+            exit 1
+          fi
+
+  python:
+    name: Python bindings
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      # Ubuntu 22.04's Python (3.10) and numpy, as ROS 2 Humble and the
+      # workstation use them.
+      image: ubuntu:jammy
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install Python and build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential ca-certificates \
+            curl git python3 python3-pip python3-numpy
+          pip3 install 'maturin>=1.16,<1.17' 'pytest>=8,<9'
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          # As rust-toolchain.toml lists them, so rustup has nothing to add.
+          components: clippy, rustfmt
+
+      # As tools/install_bindings.sh builds it: release, one abi3 wheel for
+      # Python 3.10 and later, tagged for plain linux since it is never
+      # published to PyPI.
+      - name: Build the wheel
+        run: |
+          maturin build --release -m crates/argus-sim-py/Cargo.toml --out dist \
+            --compatibility linux --interpreter python3
+
+      # Unpacked rather than installed, so the tests import exactly this
+      # build.
+      - name: Test the wheel
+        run: |
+          python3 -m zipfile -e dist/argus_sim_py-*.whl site
+          export PYTHONPATH="$PWD/site"
+          python3 -c 'import argus_sim_py; print("argus_sim_py", argus_sim_py.__version__, argus_sim_py.__file__)'
+          python3 -m pytest -q -p no:cacheprovider crates/argus-sim-py/pytests
+
+      - name: Upload the wheel
+        uses: actions/upload-artifact@v6
+        with:
+          name: argus-sim-py-wheel
+          path: dist/*.whl
+          if-no-files-found: error
 
   docs:
-    name: Doxygen reference
+    name: Documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      # rustdoc compiles the node, which needs rclrs and Humble's Rust
+      # message bindings.
+      image: ros:humble-ros-base-jammy
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Install Doxygen and Graphviz
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq doxygen graphviz
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          # As rust-toolchain.toml lists them, so rustup has nothing to add.
+          components: clippy, rustfmt
 
-      - name: Build the reference with warnings as errors
+      - name: Update ROS packages and install Doxygen
+        run: |
+          apt-get update
+          # Get the latest Humble sync, which has the Rust message bindings.
+          apt-get dist-upgrade -y
+          apt-get install -y --no-install-recommends doxygen graphviz
+
+      # The Rust reference: the relay, the node and the bindings.
+      - name: Rustdoc (warnings are errors)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: |
+          source /opt/ros/humble/setup.bash
+          cargo doc --locked --no-deps --workspace
+
+      # The Python tools' reference, with README.md as its front page.
+      - name: Doxygen (warnings are errors)
         run: ( cat Doxyfile; echo "WARN_AS_ERROR = FAIL_ON_WARNINGS" ) | doxygen -

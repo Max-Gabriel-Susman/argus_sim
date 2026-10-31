@@ -1,4 +1,4 @@
-# Doxyfile -- API documentation for argus_sim
+# Doxyfile -- documentation for argus_sim's Python tools
 #
 #   doxygen                                   build (run from the package root)
 #   xdg-open build/html/index.html            view
@@ -7,8 +7,11 @@
 # tag not named here keeps its default. `doxygen -g reference.cfg` writes
 # the full list with every tag explained, if you need to look one up.
 #
-# Written for Doxygen 1.9.1 (Ubuntu 22.04's package); also checked
-# against 1.9.8 (Ubuntu 24.04's, which the CI job installs).
+# The Rust code (the relay, the node, the bindings) is documented by
+# rustdoc instead: `cargo doc --workspace --no-deps --open`.
+#
+# Written for Doxygen 1.9.1, Ubuntu 22.04's package, which the CI job
+# installs too.
 
 #---------------------------------------------------------------------------
 # Project
@@ -25,50 +28,28 @@ OUTPUT_DIRECTORY       = build
 # What to read
 #---------------------------------------------------------------------------
 
-# Two languages, one reference: the C++ replay server and relay node, and
-# the Python tools. README.md is the front page.
+# The Python tools, with README.md as the front page.
 INPUT                  = README.md \
-                         include \
-                         src \
                          tools
-FILE_PATTERNS          = *.cpp \
-                         *.hpp \
-                         *.py
+FILE_PATTERNS          = *.py
 RECURSIVE              = YES
 
 USE_MDFILE_AS_MAINPAGE = README.md
-
-# Show the include line the way a user writes it: "argus_sim/replay_server.hpp".
-STRIP_FROM_INC_PATH    = include
 
 #---------------------------------------------------------------------------
 # How to read it
 #---------------------------------------------------------------------------
 
-# The ROS headers are not on this machine's path when the docs build (CI
-# has no ROS at all). Doxygen does not need them: nothing here depends on
-# macro expansion from rclcpp, and with include searching off it neither
-# looks for them nor warns about not finding them.
-SEARCH_INCLUDES        = NO
+# Python docstrings are shown as written (PYTHON_DOCSTRING, on by default):
+# the tools' docstrings are their --help text, and they read best verbatim.
 
-# std::string, std::vector and the like are recognised as the standard
-# library rather than listed as unknown classes.
-BUILTIN_STL_SUPPORT    = YES
-
-# The first sentence of a /** ... */ comment becomes its one-line summary,
-# so an existing /* ... */ comment turns into documentation by adding one
-# asterisk. Python docstrings are shown as written (PYTHON_DOCSTRING, on by
-# default): the tools' docstrings are their --help text, and they read
-# best verbatim.
-JAVADOC_AUTOBRIEF      = YES
-
-# Show every file, class, function and member, documented or not, so the
-# site is complete from the first run.
+# Show every file, function and variable, documented or not, so the site
+# is complete from the first run.
 EXTRACT_ALL            = YES
 EXTRACT_STATIC         = YES
 
-# The server's behaviour is in its private members: the receive loop, the
-# request handler, the socket, the counters. Same for the node.
+# Names with a leading underscore are shown too, should a tool grow
+# private helpers.
 EXTRACT_PRIVATE        = YES
 
 #---------------------------------------------------------------------------
@@ -83,9 +64,8 @@ SOURCE_BROWSER         = YES
 REFERENCED_BY_RELATION = YES
 REFERENCES_RELATION    = YES
 
-# Graphs need Graphviz (the dot program). The caller graph of
-# ReplayServer::handle() is the request path; the collaboration graph of
-# the node shows what it owns.
+# Graphs need Graphviz (the dot program): which helper calls which, in
+# each tool.
 HAVE_DOT               = YES
 CALL_GRAPH             = YES
 CALLER_GRAPH           = YES
